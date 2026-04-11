@@ -127,11 +127,19 @@
     user-select: none;
 }
 
-/* URL input — single element used for both display and editing */
-#zen-dev-url-banner-input {
+/* Wrapper — the flex item that holds input + overlay */
+#zen-dev-url-field {
     flex: 1;
-    -moz-appearance: none;
+    position: relative;
+    min-width: 0;
+    border-radius: 4px;
+}
+
+/* Input — always in the layout, never display:none, so no layout shift */
+#zen-dev-url-banner-input {
+    width: 100%;
     box-sizing: border-box;
+    -moz-appearance: none;
     background: color-mix(in srgb, #ff6b35 8%, var(--toolbar-bgcolor));
     border: none;
     outline: 1.5px solid transparent;
@@ -140,25 +148,47 @@
     font-family: monospace !important;
     line-height: 1.4;
     letter-spacing: 0;
-    text-align: left;
-    min-width: 0;
     padding: 4px 8px;
     border-radius: 4px;
+    cursor: text;
+    display: block;
 }
 
-/* Readonly = display mode */
-#zen-dev-url-banner-input[readonly] {
+#zen-dev-url-banner-input:focus {
+    outline-color: rgba(255, 107, 53, 0.75);
+}
+
+/* Overlay — covers the input in display mode with styled protocol/host text */
+#zen-dev-url-display {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    white-space: nowrap;
+    padding: 0 8px;
+    font-size: 13px;
+    font-family: monospace !important;
+    line-height: 1.4;
+    letter-spacing: 0;
+    background: color-mix(in srgb, #ff6b35 8%, var(--toolbar-bgcolor));
+    border-radius: 4px;
     cursor: pointer;
 }
 
-#zen-dev-url-banner-input[readonly]:hover {
+#zen-dev-url-display:hover {
     background: color-mix(in srgb, #ff6b35 12%, var(--toolbar-bgcolor));
 }
 
-/* Editable = edit mode */
-#zen-dev-url-banner-input:not([readonly]) {
-    cursor: text;
-    outline-color: rgba(255, 107, 53, 0.75);
+.zen-dev-url-protocol {
+    color: rgba(255, 255, 255, 0.4);
+    flex-shrink: 0;
+}
+
+.zen-dev-url-host {
+    color: rgba(255, 255, 255, 0.85);
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .zen-dev-url-btn {
