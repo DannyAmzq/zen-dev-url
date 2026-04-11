@@ -19,7 +19,9 @@
 
 /* Dev banner shown above the page content */
 #zen-dev-url-banner {
-    display: none;
+    display: flex;
+    visibility: hidden;
+    pointer-events: none;
     position: fixed;
     top: 0;
     height: 38px;
@@ -37,11 +39,15 @@
         ),
         color-mix(in srgb, #ff6b35 15%, var(--toolbar-bgcolor));
     border-bottom: 1.5px solid #ff6b35;
-    cursor: pointer;
+    cursor: default;
+    opacity: 0;
+    transition: opacity 0.15s ease, visibility 0.15s ease;
 }
 
 :root[zen-dev-url] #zen-dev-url-banner {
-    display: flex;
+    visibility: visible;
+    pointer-events: auto;
+    opacity: 1;
 }
 
 /* Push the page content down so the banner doesn't overlap it */
@@ -132,8 +138,20 @@
     border-color: #ff6b35;
 }
 
+.zen-dev-url-btn:active {
+    transform: scale(0.88);
+}
+
 .zen-dev-url-btn:hover::before {
     background-color: #ffffff;
+}
+
+.zen-dev-url-separator {
+    flex-shrink: 0;
+    width: 1px;
+    height: 18px;
+    background: rgba(255, 255, 255, 0.2);
+    margin: 0 8px;
 }
 
 #zen-dev-url-clear-refresh::before {

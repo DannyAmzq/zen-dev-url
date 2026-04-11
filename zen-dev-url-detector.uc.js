@@ -66,11 +66,26 @@
       const banner = document.createXULElement('hbox');
       banner.id = 'zen-dev-url-banner';
 
-      // Editable URL input — Enter navigates, Escape cancels
+      // "DEV" badge shown on the left
+      const badge = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+      badge.id = 'zen-dev-url-badge';
+      badge.textContent = 'DEV';
+
+      // Display span — shows the URL with protocol dimmed, hidden when editing
+      const urlDisplay = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+      urlDisplay.id = 'zen-dev-url-display';
+      urlDisplay.addEventListener('click', () => {
+        urlDisplay.style.display = 'none';
+        input.style.display = '';
+        input.focus();
+      });
+
+      // Editable URL input — shown only when editing
       const input = document.createElementNS('http://www.w3.org/1999/xhtml', 'input');
       input.id = 'zen-dev-url-banner-input';
       input.type = 'text';
       input.spellcheck = false;
+      input.style.display = 'none';
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           const val = input.value.trim();
@@ -85,6 +100,10 @@
         }
       });
       input.addEventListener('focus', () => input.select());
+      input.addEventListener('blur', () => {
+        input.style.display = 'none';
+        urlDisplay.style.display = '';
+      });
 
       /**
        * Lazily loads DevToolsShim so DevTools panels can be opened/closed
@@ -173,7 +192,13 @@
         },
       ];
 
+      const separator = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+      separator.className = 'zen-dev-url-separator';
+
+      banner.appendChild(badge);
+      banner.appendChild(urlDisplay);
       banner.appendChild(input);
+      banner.appendChild(separator);
       for (const { id, title, action } of buttons) {
         const btn = document.createElementNS('http://www.w3.org/1999/xhtml', 'button');
         btn.id = id;
@@ -186,6 +211,7 @@
       document.documentElement.appendChild(banner);
       this._banner = banner;
       this._input = input;
+      this._urlDisplay = urlDisplay;
       this._repositionBanner();
       // Re-align banner if window is resized or sidebar width changes
       window.addEventListener('resize', () => this._repositionBanner());
@@ -238,8 +264,20 @@
       const currentUri = uri || gBrowser.currentURI;
       const isDev = this._enabled && this._isDevUri(currentUri);
       document.documentElement.toggleAttribute('zen-dev-url', isDev);
-      if (this._input && isDev && currentUri) {
-        this._input.value = currentUri.spec;
+      if (isDev && currentUri) {
+        const spec = currentUri.spec;
+        if (this._input) this._input.value = spec;
+        if (this._urlDisplay) {
+          // Dim the protocol, highlight the rest (handles http/https/file)
+          const match = spec.match(/^((?:https?|file):\/\/\/?)(.*)/);
+          if (match) {
+            this._urlDisplay.innerHTML =
+              `<span class="zen-dev-url-protocol">${match[1]}</span>` +
+              `<span class="zen-dev-url-host">${match[2]}</span>`;
+          } else {
+            this._urlDisplay.textContent = spec;
+          }
+        }
       }
     },
 
