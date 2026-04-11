@@ -62,10 +62,10 @@
             -45deg,
             transparent,
             transparent 6px,
-            rgba(255, 107, 53, 0.35) 6px,
-            rgba(255, 107, 53, 0.35) 12px
+            rgba(255, 107, 53, 0.18) 6px,
+            rgba(255, 107, 53, 0.18) 12px
         ),
-        color-mix(in srgb, #ff6b35 15%, var(--toolbar-bgcolor));
+        color-mix(in srgb, #ff6b35 28%, var(--toolbar-bgcolor));
     border-bottom: 1.5px solid #ff6b35;
     cursor: default;
     opacity: 0;
@@ -106,10 +106,10 @@
             -45deg,
             transparent,
             transparent 6px,
-            rgba(255, 107, 53, 0.45) 6px,
-            rgba(255, 107, 53, 0.45) 12px
+            rgba(255, 107, 53, 0.25) 6px,
+            rgba(255, 107, 53, 0.25) 12px
         ),
-        color-mix(in srgb, #ff6b35 25%, var(--toolbar-bgcolor));
+        color-mix(in srgb, #ff6b35 35%, var(--toolbar-bgcolor));
 }
 
 /* DEV pill badge on the left */
@@ -182,8 +182,8 @@
     width: 26px;
     height: 22px;
     padding: 0;
-    background-color: rgba(15, 6, 2, 0.55);
-    border: 1px solid rgba(255, 107, 53, 0.9);
+    background-color: rgba(255, 107, 53, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.35);
     border-radius: 4px;
     cursor: pointer;
     position: relative;
@@ -204,8 +204,8 @@
 }
 
 .zen-dev-url-btn:hover {
-    background-color: rgba(255, 107, 53, 0.35);
-    border-color: #ff6b35;
+    background-color: rgba(255, 107, 53, 0.7);
+    border-color: rgba(255, 255, 255, 0.55);
 }
 
 .zen-dev-url-btn:active {
