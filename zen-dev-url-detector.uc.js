@@ -81,19 +81,21 @@
       badge.id = 'zen-dev-url-badge';
       badge.textContent = 'DEV';
 
-      // Single input — readonly when displaying, editable when clicked.
-      // Using one element avoids any text shift or spacing change on transition.
+      // Display span — shows the URL with protocol dimmed, hidden when editing
+      const urlDisplay = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+      urlDisplay.id = 'zen-dev-url-display';
+      urlDisplay.addEventListener('click', () => {
+        urlDisplay.style.display = 'none';
+        input.style.display = '';
+        input.focus();
+      });
+
+      // Editable URL input — shown only when editing
       const input = document.createElementNS('http://www.w3.org/1999/xhtml', 'input');
       input.id = 'zen-dev-url-banner-input';
       input.type = 'text';
       input.spellcheck = false;
-      input.readOnly = true;
-      input.addEventListener('click', () => {
-        if (input.readOnly) {
-          input.readOnly = false;
-          // Browser positions cursor at click point naturally after readOnly removed
-        }
-      });
+      input.style.display = 'none';
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           const val = input.value.trim();
@@ -109,7 +111,8 @@
       });
       input.addEventListener('dblclick', () => input.select());
       input.addEventListener('blur', () => {
-        input.readOnly = true;
+        input.style.display = 'none';
+        urlDisplay.style.display = '';
       });
 
       /**
@@ -206,8 +209,9 @@
         makeBtn('zen-dev-url-network', 'Open network panel', () => togglePanel('netmonitor')),
       ];
 
-      // Layout: [badge] [input] [copy] | sep | [screenshot] | sep | [reload] [inspector] [console] [network]
+      // Layout: [badge] [display/input] [copy] | sep | [screenshot] | sep | [reload] [inspector] [console] [network]
       banner.appendChild(badge);
+      banner.appendChild(urlDisplay);
       banner.appendChild(input);
       banner.appendChild(copyBtn);
       banner.appendChild(makeSeparator());
@@ -220,6 +224,7 @@
       document.documentElement.appendChild(banner);
       this._banner = banner;
       this._input = input;
+      this._urlDisplay = urlDisplay;
       this._repositionBanner();
       // Re-align banner if window is resized or sidebar width changes
       window.addEventListener('resize', () => this._repositionBanner());
@@ -273,7 +278,18 @@
       const isDev = this._enabled && this._isDevUri(currentUri);
       document.documentElement.toggleAttribute('zen-dev-url', isDev);
       if (isDev && currentUri) {
-        if (this._input) this._input.value = currentUri.spec;
+        const spec = currentUri.spec;
+        if (this._input) this._input.value = spec;
+        if (this._urlDisplay) {
+          const match = spec.match(/^((?:https?|file):\/\/\/?)(.*)/);
+          if (match) {
+            this._urlDisplay.innerHTML =
+              `<span class="zen-dev-url-protocol">${match[1]}</span>` +
+              `<span class="zen-dev-url-host">${match[2]}</span>`;
+          } else {
+            this._urlDisplay.textContent = spec;
+          }
+        }
       }
     },
 
