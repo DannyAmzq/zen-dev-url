@@ -127,39 +127,7 @@
     user-select: none;
 }
 
-/* URL display area (shown when not editing) */
-#zen-dev-url-display {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    overflow: hidden;
-    white-space: nowrap;
-    font-size: 13px;
-    font-family: monospace !important;
-    letter-spacing: 0;
-    cursor: pointer;
-    padding: 0 8px;
-    border-radius: 4px;
-    background: color-mix(in srgb, #ff6b35 8%, var(--toolbar-bgcolor));
-    min-width: 0;
-}
-
-#zen-dev-url-display:hover {
-    background: color-mix(in srgb, #ff6b35 12%, var(--toolbar-bgcolor));
-}
-
-.zen-dev-url-protocol {
-    color: rgba(255, 255, 255, 0.4);
-    flex-shrink: 0;
-}
-
-.zen-dev-url-host {
-    color: rgba(255, 255, 255, 0.85);
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* Editable URL input inside the banner */
+/* URL input — single element used for both display and editing */
 #zen-dev-url-banner-input {
     flex: 1;
     -moz-appearance: none;
@@ -170,15 +138,26 @@
     color: rgba(255, 255, 255, 0.85);
     font-size: 13px;
     font-family: monospace !important;
+    line-height: 1.4;
     letter-spacing: 0;
     text-align: left;
-    cursor: text;
     min-width: 0;
-    padding: 0 8px;
+    padding: 4px 8px;
     border-radius: 4px;
 }
 
-#zen-dev-url-banner-input:focus {
+/* Readonly = display mode */
+#zen-dev-url-banner-input[readonly] {
+    cursor: pointer;
+}
+
+#zen-dev-url-banner-input[readonly]:hover {
+    background: color-mix(in srgb, #ff6b35 12%, var(--toolbar-bgcolor));
+}
+
+/* Editable = edit mode */
+#zen-dev-url-banner-input:not([readonly]) {
+    cursor: text;
     outline-color: rgba(255, 107, 53, 0.75);
 }
 
