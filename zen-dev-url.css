@@ -84,6 +84,48 @@
         color-mix(in srgb, #ff6b35 25%, var(--toolbar-bgcolor));
 }
 
+/* DEV pill badge on the left */
+#zen-dev-url-badge {
+    flex-shrink: 0;
+    background: #ff6b35;
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: monospace;
+    letter-spacing: 0.05em;
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-right: 8px;
+    user-select: none;
+}
+
+/* URL display area (shown when not editing) */
+#zen-dev-url-display {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    font-family: monospace;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: color-mix(in srgb, #ff6b35 8%, var(--toolbar-bgcolor));
+    min-width: 0;
+}
+
+#zen-dev-url-display:hover {
+    background: color-mix(in srgb, #ff6b35 15%, var(--toolbar-bgcolor));
+}
+
+.zen-dev-url-protocol {
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.zen-dev-url-host {
+    color: rgba(255, 255, 255, 0.85);
+}
+
 /* Editable URL input inside the banner */
 #zen-dev-url-banner-input {
     flex: 1;
