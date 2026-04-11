@@ -54,9 +54,9 @@
       window.addEventListener('TabSelect', this);
       // Listen for pref changes
       Services.prefs.addObserver(this.PREF, this);
-      // Ctrl+Shift+D toggles dev mode (all platforms; avoids Ctrl+D bookmark conflict on Win/Linux)
+      // Alt+Shift+D toggles dev mode (free on all platforms)
       window.addEventListener('keydown', (e) => {
-        if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        if (e.altKey && e.shiftKey && e.key === 'D') {
           e.preventDefault();
           Services.prefs.setBoolPref(this.PREF, !this._enabled);
         }
