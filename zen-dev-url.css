@@ -17,10 +17,26 @@
     );
 }
 
-/* Active tab in sidebar gets an orange outline on dev URLs */
+/* Active tab in sidebar gets a construction stripe border on dev URLs */
 :root[zen-dev-url] .tabbrowser-tab[selected] .tab-background {
-    outline: 1.5px solid #ff6b35 !important;
-    outline-offset: -1px;
+    position: relative !important;
+    overflow: visible !important;
+}
+
+:root[zen-dev-url] .tabbrowser-tab[selected] .tab-background::after {
+    content: '';
+    pointer-events: none;
+    position: absolute;
+    inset: -2px;
+    border-radius: 8px;
+    z-index: -1;
+    background: repeating-linear-gradient(
+        -45deg,
+        #ff6b35 0px,
+        #ff6b35 4px,
+        rgba(120, 40, 10, 0.85) 4px,
+        rgba(120, 40, 10, 0.85) 8px
+    );
 }
 
 /* Dev banner shown above the page content */
@@ -160,8 +176,8 @@
     width: 26px;
     height: 22px;
     padding: 0;
-    background-color: rgba(255, 107, 53, 0.15);
-    border: 1px solid rgba(255, 107, 53, 0.4);
+    background-color: rgba(255, 107, 53, 0.3);
+    border: 1px solid rgba(255, 107, 53, 0.65);
     border-radius: 4px;
     cursor: pointer;
     position: relative;
