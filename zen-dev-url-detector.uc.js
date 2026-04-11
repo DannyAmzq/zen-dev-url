@@ -54,13 +54,19 @@
       window.addEventListener('TabSelect', this);
       // Listen for pref changes
       Services.prefs.addObserver(this.PREF, this);
-      // Alt+Shift+D toggles dev mode (free on all platforms)
-      window.addEventListener('keydown', (e) => {
-        if (e.altKey && e.shiftKey && e.key === 'D') {
-          e.preventDefault();
+      // Alt+Shift+D toggles dev mode — XUL key so it works even when page content has focus
+      const keyset = document.getElementById('mainKeyset');
+      if (keyset) {
+        const key = document.createXULElement('key');
+        key.id = 'zen-dev-url-toggle-key';
+        key.setAttribute('key', 'D');
+        key.setAttribute('modifiers', 'alt shift');
+        key.setAttribute('oncommand', ';');
+        key.addEventListener('command', () => {
           Services.prefs.setBoolPref(this.PREF, !this._enabled);
-        }
-      }, true);
+        });
+        keyset.appendChild(key);
+      }
       this._update();
     },
 
@@ -175,12 +181,9 @@
 
       // Copy URL button — lives at the right edge of the URL display area
       const copyBtn = makeBtn('zen-dev-url-copy-link', 'Copy URL', () => {
-        Cc['@mozilla.org/widget/clipboardhelper;1']
-          .getService(Ci.nsIClipboardHelper)
-          .copyString(gBrowser.currentURI.spec);
+        gZenCommonActions.copyCurrentURLToClipboard();
         copyBtn.setAttribute('data-copied', '');
         setTimeout(() => copyBtn.removeAttribute('data-copied'), 1500);
-        gZenUIManager.showToast('zen-copy-current-url-confirmation');
       });
 
       // Screenshot button — isolated between separators
