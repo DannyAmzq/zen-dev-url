@@ -1,0 +1,157 @@
+/* ============================================================
+   zen-dev-url — Dev URL indicator for Zen Browser
+   Add the contents of this file to your userChrome.css
+   ============================================================ */
+
+/* Sidebar URL bar gets an orange outline on dev URLs */
+:root[zen-dev-url] #urlbar .urlbar-background {
+    outline: 1.5px solid #ff6b35 !important;
+    outline-offset: -1.5px;
+}
+
+:root[zen-dev-url] #urlbar:not([breakout-extend="true"]) .urlbar-background {
+    background-color: color-mix(
+        in srgb,
+        #ff6b35 8%,
+        var(--toolbar-bgcolor)
+    );
+}
+
+/* Dev banner shown above the page content */
+#zen-dev-url-banner {
+    display: none;
+    position: fixed;
+    top: 0;
+    height: 38px;
+    z-index: 9999;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 0 12px;
+    background:
+        repeating-linear-gradient(
+            -45deg,
+            transparent,
+            transparent 6px,
+            rgba(255, 107, 53, 0.35) 6px,
+            rgba(255, 107, 53, 0.35) 12px
+        ),
+        color-mix(in srgb, #ff6b35 15%, var(--toolbar-bgcolor));
+    border-bottom: 1.5px solid #ff6b35;
+    cursor: pointer;
+}
+
+:root[zen-dev-url] #zen-dev-url-banner {
+    display: flex;
+}
+
+/* Push the page content down so the banner doesn't overlap it */
+:root[zen-dev-url] #tabbrowser-tabpanels > .browserSidebarContainer {
+    padding-top: 38px !important;
+    background-color: color-mix(in srgb, #ff6b35 15%, var(--toolbar-bgcolor)) !important;
+}
+
+/* Push Zen chrome elements below the dev banner */
+:root[zen-dev-url] #zen-toast-container {
+    top: 46px !important;
+}
+
+:root[zen-dev-url] .screenshotsPagePanel {
+    margin-top: 38px !important;
+}
+
+:root[zen-dev-url] #zen-splitview-overlay-wrapper,
+:root[zen-dev-url] #fullscreen-warning,
+:root[zen-dev-url] #pointerlock-warning,
+:root[zen-dev-url] #fullscr-toggler {
+    margin-top: 38px !important;
+}
+
+#zen-dev-url-banner:hover {
+    background:
+        repeating-linear-gradient(
+            -45deg,
+            transparent,
+            transparent 6px,
+            rgba(255, 107, 53, 0.45) 6px,
+            rgba(255, 107, 53, 0.45) 12px
+        ),
+        color-mix(in srgb, #ff6b35 25%, var(--toolbar-bgcolor));
+}
+
+/* Editable URL input inside the banner */
+#zen-dev-url-banner-input {
+    flex: 1;
+    background: color-mix(in srgb, #ff6b35 8%, var(--toolbar-bgcolor));
+    border: none;
+    outline: none;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 11px;
+    font-family: monospace;
+    text-align: left;
+    cursor: text;
+    min-width: 0;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+#zen-dev-url-banner-input:focus {
+    color: #ffffff;
+    background: color-mix(in srgb, #ff6b35 15%, var(--toolbar-bgcolor));
+    cursor: text;
+}
+
+.zen-dev-url-btn {
+    flex-shrink: 0;
+    margin-left: 4px;
+    width: 26px;
+    height: 22px;
+    padding: 0;
+    background-color: rgba(255, 107, 53, 0.15);
+    border: 1px solid rgba(255, 107, 53, 0.4);
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+}
+
+.zen-dev-url-btn::before {
+    content: '';
+    display: block;
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 14px;
+    height: 14px;
+    background-color: rgba(255, 255, 255, 0.8);
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+}
+
+.zen-dev-url-btn:hover {
+    background-color: rgba(255, 107, 53, 0.3);
+    border-color: #ff6b35;
+}
+
+.zen-dev-url-btn:hover::before {
+    background-color: #ffffff;
+}
+
+#zen-dev-url-clear-refresh::before {
+    mask-image: url('chrome://global/skin/icons/reload.svg');
+}
+
+#zen-dev-url-screenshot::before {
+    mask-image: url('chrome://devtools/skin/images/command-screenshot.svg');
+}
+
+#zen-dev-url-inspector::before {
+    mask-image: url('chrome://devtools/skin/images/tool-inspector.svg');
+}
+
+#zen-dev-url-console::before {
+    mask-image: url('chrome://devtools/skin/images/tool-webconsole.svg');
+}
+
+#zen-dev-url-network::before {
+    mask-image: url('chrome://devtools/skin/images/tool-network.svg');
+}
