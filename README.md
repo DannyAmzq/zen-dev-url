@@ -4,9 +4,13 @@ A userChrome mod for [Zen Browser](https://zen-browser.app) that detects localho
 
 ## What it does
 
-- Adds an orange outline to the sidebar URL bar when you're on a dev URL
-- Shows an editable dev URL banner above the page content (click to edit, Enter to navigate, Escape to cancel)
-- Automatically detects `localhost`, `127.0.0.1`, `0.0.0.0`, `[::1]`, `file://`, and hostnames ending in `.local`, `.localhost`, `.internal`, or `.test`
+- Shows a **dev banner** above the page with construction-stripe styling
+- Displays the current URL in the banner with dimmed protocol and editable input (click to edit, Enter to navigate, Escape to cancel)
+- **Copy URL** button with native Zen "Copied current URL!" toast and share button
+- **Action buttons**: screenshot, clear cache & reload, element inspector, console, network panel
+- Adds an orange outline to the sidebar URL bar on dev URLs
+- Toggle dev mode on/off with **Alt+Shift+D**
+- Automatically detects common dev URL patterns (see table below)
 - Can be toggled via the preference `zen.urlbar.show-dev-indicator`
 
 ## Installation
@@ -35,11 +39,10 @@ The mod loads on startup. Navigate to `localhost` or any other dev URL to see it
 
 ## Toggling the feature
 
-You can disable the indicator without removing the files by setting the preference in `about:config`:
-
-```
-zen.urlbar.show-dev-indicator = false
-```
+| Method | Action |
+|---|---|
+| **Alt+Shift+D** | Toggle dev mode on/off from anywhere |
+| `about:config` | Set `zen.urlbar.show-dev-indicator = false` to disable |
 
 ## Detected URL patterns
 
@@ -54,3 +57,15 @@ zen.urlbar.show-dev-indicator = false
 | .internal TLD | `http://api.internal` |
 | .test TLD | `http://myapp.test` |
 | file:// | any local file |
+
+## Banner actions
+
+| Button | Action |
+|---|---|
+| URL display | Click to edit, Enter to navigate, Escape to cancel |
+| Copy | Copies the current URL, shows Zen's native toast |
+| Screenshot | Opens Firefox Screenshots |
+| Reload | Hard reload (bypass cache) |
+| Inspector | Opens DevTools element picker |
+| Console | Toggles DevTools console |
+| Network | Toggles DevTools network panel |
