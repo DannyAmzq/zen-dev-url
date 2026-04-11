@@ -29,7 +29,8 @@
     position: absolute;
     inset: -2px;
     border-radius: 8px;
-    z-index: -1;
+    padding: 2px;
+    box-sizing: border-box;
     background: repeating-linear-gradient(
         -45deg,
         #ff6b35 0px,
@@ -37,6 +38,11 @@
         rgba(120, 40, 10, 0.85) 4px,
         rgba(120, 40, 10, 0.85) 8px
     );
+    -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: destination-out;
+    mask-composite: exclude;
 }
 
 /* Dev banner shown above the page content */
@@ -176,8 +182,8 @@
     width: 26px;
     height: 22px;
     padding: 0;
-    background-color: rgba(255, 107, 53, 0.3);
-    border: 1px solid rgba(255, 107, 53, 0.65);
+    background-color: rgba(255, 107, 53, 0.55);
+    border: 1px solid rgba(255, 107, 53, 0.9);
     border-radius: 4px;
     cursor: pointer;
     position: relative;
