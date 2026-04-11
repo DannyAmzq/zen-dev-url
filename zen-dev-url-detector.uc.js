@@ -151,60 +151,65 @@
         }
       };
 
-      const buttons = [
-        {
-          id: 'zen-dev-url-clear-refresh',
-          title: 'Clear cache and reload',
-          action: () => gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE),
-        },
-        {
-          id: 'zen-dev-url-screenshot',
-          title: 'Take screenshot',
-          action: () => toggleScreenshot(),
-        },
-        {
-          id: 'zen-dev-url-inspector',
-          title: 'Inspect element',
-          action: () => {
-            const dt = getDevTools();
-            if (!dt) return;
-            const toolbox = dt.getToolboxForTab(gBrowser.selectedTab);
-            // Close inspector if already open
-            if (toolbox && !toolbox._destroyer && toolbox.currentToolId === 'inspector') {
-              toolbox.destroy();
-              return;
-            }
-            // Open inspector and immediately activate the node picker
-            dt.showToolboxForTab(gBrowser.selectedTab, { toolId: 'inspector' })
-              .then(tb => tb?.nodePicker?.start(tb.currentTarget, tb))
-              .catch(e => console.error('[zen-dev-url] picker error:', e));
-          },
-        },
-        {
-          id: 'zen-dev-url-console',
-          title: 'Open console',
-          action: () => togglePanel('webconsole'),
-        },
-        {
-          id: 'zen-dev-url-network',
-          title: 'Open network panel',
-          action: () => togglePanel('netmonitor'),
-        },
-      ];
+      const makeSeparator = () => {
+        const sep = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+        sep.className = 'zen-dev-url-separator';
+        return sep;
+      };
 
-      const separator = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
-      separator.className = 'zen-dev-url-separator';
-
-      banner.appendChild(badge);
-      banner.appendChild(urlDisplay);
-      banner.appendChild(input);
-      banner.appendChild(separator);
-      for (const { id, title, action } of buttons) {
+      const makeBtn = (id, title, action) => {
         const btn = document.createElementNS('http://www.w3.org/1999/xhtml', 'button');
         btn.id = id;
         btn.className = 'zen-dev-url-btn';
         btn.title = title;
         btn.addEventListener('click', action);
+        return btn;
+      };
+
+      // Copy URL button — lives at the right edge of the URL display area
+      const copyBtn = makeBtn('zen-dev-url-copy-link', 'Copy URL', () => {
+        Cc['@mozilla.org/widget/clipboardhelper;1']
+          .getService(Ci.nsIClipboardHelper)
+          .copyString(gBrowser.currentURI.spec);
+        copyBtn.setAttribute('data-copied', '');
+        setTimeout(() => copyBtn.removeAttribute('data-copied'), 1500);
+      });
+
+      // Screenshot button — isolated between separators
+      const screenshotBtn = makeBtn('zen-dev-url-screenshot', 'Take screenshot',
+        () => toggleScreenshot());
+
+      // DevTools group: reload, inspector, console, network
+      const devButtons = [
+        makeBtn('zen-dev-url-clear-refresh', 'Clear cache and reload',
+          () => gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE)),
+        makeBtn('zen-dev-url-inspector', 'Inspect element', () => {
+          const dt = getDevTools();
+          if (!dt) return;
+          const toolbox = dt.getToolboxForTab(gBrowser.selectedTab);
+          // Close inspector if already open
+          if (toolbox && !toolbox._destroyer && toolbox.currentToolId === 'inspector') {
+            toolbox.destroy();
+            return;
+          }
+          // Open inspector and immediately activate the node picker
+          dt.showToolboxForTab(gBrowser.selectedTab, { toolId: 'inspector' })
+            .then(tb => tb?.nodePicker?.start(tb.currentTarget, tb))
+            .catch(e => console.error('[zen-dev-url] picker error:', e));
+        }),
+        makeBtn('zen-dev-url-console', 'Open console', () => togglePanel('webconsole')),
+        makeBtn('zen-dev-url-network', 'Open network panel', () => togglePanel('netmonitor')),
+      ];
+
+      // Layout: [badge] [display/input] [copy] | sep | [screenshot] | sep | [reload] [inspector] [console] [network]
+      banner.appendChild(badge);
+      banner.appendChild(urlDisplay);
+      banner.appendChild(input);
+      banner.appendChild(copyBtn);
+      banner.appendChild(makeSeparator());
+      banner.appendChild(screenshotBtn);
+      banner.appendChild(makeSeparator());
+      for (const btn of devButtons) {
         banner.appendChild(btn);
       }
 
