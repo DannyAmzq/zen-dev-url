@@ -54,19 +54,16 @@
       window.addEventListener('TabSelect', this);
       // Listen for pref changes
       Services.prefs.addObserver(this.PREF, this);
-      // Alt+Shift+D toggles dev mode — XUL key so it works even when page content has focus
-      const keyset = document.getElementById('mainKeyset');
-      if (keyset) {
-        const key = document.createXULElement('key');
-        key.id = 'zen-dev-url-toggle-key';
-        key.setAttribute('key', 'D');
-        key.setAttribute('modifiers', 'alt shift');
-        key.setAttribute('oncommand', ';');
-        key.addEventListener('command', () => {
+      // Alt+Shift+D toggles dev mode.
+      // mozSystemGroup: true fires before web content and other extensions,
+      // so it wins regardless of what else has focus or is registered.
+      window.addEventListener('keydown', (e) => {
+        if (e.altKey && e.shiftKey && e.key === 'D') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
           Services.prefs.setBoolPref(this.PREF, !this._enabled);
-        });
-        keyset.appendChild(key);
-      }
+        }
+      }, { capture: true, mozSystemGroup: true });
       this._update();
     },
 
