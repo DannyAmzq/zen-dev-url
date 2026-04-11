@@ -158,15 +158,16 @@
     outline-color: rgba(255, 107, 53, 0.75);
 }
 
-/* Overlay — covers the input in display mode with styled protocol/host text */
+/* Overlay — covers the input in display mode with styled protocol/host text.
+   padding, font, line-height must exactly match the input so text sits at
+   the same pixel position in both states. */
 #zen-dev-url-display {
     position: absolute;
     inset: 0;
-    display: flex;
-    align-items: center;
+    display: block;
     overflow: hidden;
     white-space: nowrap;
-    padding: 0 8px;
+    padding: 4px 8px;
     font-size: 13px;
     font-family: monospace !important;
     line-height: 1.4;
