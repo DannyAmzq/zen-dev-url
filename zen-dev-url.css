@@ -17,6 +17,12 @@
     );
 }
 
+/* Active tab in sidebar gets an orange outline on dev URLs */
+:root[zen-dev-url] .tabbrowser-tab[selected] .tab-background {
+    outline: 1.5px solid #ff6b35 !important;
+    outline-offset: -1px;
+}
+
 /* Dev banner shown above the page content */
 #zen-dev-url-banner {
     display: flex;
@@ -24,7 +30,7 @@
     pointer-events: none;
     position: fixed;
     top: 0;
-    height: 38px;
+    height: 44px;
     z-index: 9999;
     align-items: center;
     justify-content: flex-start;
@@ -52,24 +58,24 @@
 
 /* Push the page content down so the banner doesn't overlap it */
 :root[zen-dev-url] #tabbrowser-tabpanels > .browserSidebarContainer {
-    padding-top: 38px !important;
+    padding-top: 44px !important;
     background-color: color-mix(in srgb, #ff6b35 15%, var(--toolbar-bgcolor)) !important;
 }
 
 /* Push Zen chrome elements below the dev banner */
 :root[zen-dev-url] #zen-toast-container {
-    top: 46px !important;
+    top: 52px !important;
 }
 
 :root[zen-dev-url] .screenshotsPagePanel {
-    margin-top: 38px !important;
+    margin-top: 44px !important;
 }
 
 :root[zen-dev-url] #zen-splitview-overlay-wrapper,
 :root[zen-dev-url] #fullscreen-warning,
 :root[zen-dev-url] #pointerlock-warning,
 :root[zen-dev-url] #fullscr-toggler {
-    margin-top: 38px !important;
+    margin-top: 44px !important;
 }
 
 #zen-dev-url-banner:hover {
@@ -105,8 +111,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 11px;
-    font-family: monospace;
+    font-size: 13px;
+    font-family: monospace !important;
     cursor: pointer;
     padding: 4px 8px;
     border-radius: 4px;
@@ -133,8 +139,8 @@
     border: none;
     outline: none;
     color: rgba(255, 255, 255, 0.85);
-    font-size: 11px;
-    font-family: monospace;
+    font-size: 13px;
+    font-family: monospace !important;
     text-align: left;
     cursor: text;
     min-width: 0;
