@@ -135,15 +135,18 @@
     white-space: nowrap;
     font-size: 13px;
     font-family: monospace !important;
+    line-height: 1.4;
+    letter-spacing: 0;
     cursor: pointer;
     padding: 4px 8px;
     border-radius: 4px;
     background: color-mix(in srgb, #ff6b35 8%, var(--toolbar-bgcolor));
+    outline: 1.5px solid transparent;
     min-width: 0;
 }
 
 #zen-dev-url-display:hover {
-    background: color-mix(in srgb, #ff6b35 15%, var(--toolbar-bgcolor));
+    background: color-mix(in srgb, #ff6b35 12%, var(--toolbar-bgcolor));
 }
 
 .zen-dev-url-protocol {
@@ -157,12 +160,16 @@
 /* Editable URL input inside the banner */
 #zen-dev-url-banner-input {
     flex: 1;
+    -moz-appearance: none;
+    box-sizing: border-box;
     background: color-mix(in srgb, #ff6b35 8%, var(--toolbar-bgcolor));
     border: none;
-    outline: none;
+    outline: 1.5px solid transparent;
     color: rgba(255, 255, 255, 0.85);
     font-size: 13px;
     font-family: monospace !important;
+    line-height: 1.4;
+    letter-spacing: 0;
     text-align: left;
     cursor: text;
     min-width: 0;
@@ -171,9 +178,8 @@
 }
 
 #zen-dev-url-banner-input:focus {
-    color: #ffffff;
-    background: color-mix(in srgb, #ff6b35 15%, var(--toolbar-bgcolor));
-    cursor: text;
+    background: color-mix(in srgb, #ff6b35 8%, var(--toolbar-bgcolor));
+    outline-color: rgba(255, 107, 53, 0.75);
 }
 
 .zen-dev-url-btn {
