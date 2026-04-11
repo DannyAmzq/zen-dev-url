@@ -182,7 +182,7 @@
     width: 26px;
     height: 22px;
     padding: 0;
-    background-color: rgba(255, 107, 53, 0.55);
+    background-color: rgba(15, 6, 2, 0.55);
     border: 1px solid rgba(255, 107, 53, 0.9);
     border-radius: 4px;
     cursor: pointer;
@@ -204,7 +204,7 @@
 }
 
 .zen-dev-url-btn:hover {
-    background-color: rgba(255, 107, 53, 0.3);
+    background-color: rgba(255, 107, 53, 0.35);
     border-color: #ff6b35;
 }
 
