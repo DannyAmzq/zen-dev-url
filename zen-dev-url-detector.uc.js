@@ -109,7 +109,7 @@
           input.blur();
         }
       });
-      input.addEventListener('focus', () => input.select());
+      input.addEventListener('dblclick', () => input.select());
       input.addEventListener('blur', () => {
         input.style.display = 'none';
         urlDisplay.style.display = '';
