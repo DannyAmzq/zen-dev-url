@@ -148,10 +148,20 @@
 
 .zen-dev-url-separator {
     flex-shrink: 0;
-    width: 1px;
-    height: 18px;
-    background: rgba(255, 255, 255, 0.2);
+    width: 1.5px;
+    height: 22px;
+    background: rgba(255, 255, 255, 0.45);
     margin: 0 8px;
+    border-radius: 1px;
+}
+
+#zen-dev-url-copy-link::before {
+    mask-image: url('chrome://global/skin/icons/edit-copy.svg');
+}
+
+#zen-dev-url-copy-link[data-copied]::before {
+    mask-image: url('chrome://global/skin/icons/check.svg');
+    background-color: #90ee90;
 }
 
 #zen-dev-url-copy-link::before {

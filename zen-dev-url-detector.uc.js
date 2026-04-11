@@ -54,6 +54,13 @@
       window.addEventListener('TabSelect', this);
       // Listen for pref changes
       Services.prefs.addObserver(this.PREF, this);
+      // Ctrl+Shift+D toggles dev mode (all platforms; avoids Ctrl+D bookmark conflict on Win/Linux)
+      window.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+          e.preventDefault();
+          Services.prefs.setBoolPref(this.PREF, !this._enabled);
+        }
+      }, true);
       this._update();
     },
 
@@ -173,6 +180,7 @@
           .copyString(gBrowser.currentURI.spec);
         copyBtn.setAttribute('data-copied', '');
         setTimeout(() => copyBtn.removeAttribute('data-copied'), 1500);
+        this._showCopyToast();
       });
 
       // Screenshot button — isolated between separators
@@ -283,6 +291,37 @@
             this._urlDisplay.textContent = spec;
           }
         }
+      }
+    },
+
+    /**
+     * Shows a Zen-native toast saying "Copied current URL!" by manually
+     * constructing the toast element that ZenUIManager would otherwise build.
+     */
+    _showCopyToast() {
+      try {
+        const container = document.getElementById('zen-toast-container');
+        if (!container) return;
+        // Reuse existing toast if already showing
+        for (const child of container.children) {
+          if (child._messageId === 'zen-dev-url-copied') return;
+        }
+        const wrapper = document.createXULElement('hbox');
+        const vbox = document.createXULElement('vbox');
+        const label = document.createXULElement('label');
+        label.value = 'Copied current URL!';
+        vbox.appendChild(label);
+        wrapper.appendChild(vbox);
+        wrapper.classList.add('zen-toast');
+        wrapper._messageId = 'zen-dev-url-copied';
+        container.removeAttribute('hidden');
+        container.appendChild(wrapper);
+        setTimeout(() => {
+          wrapper.remove();
+          if (!container.children.length) container.setAttribute('hidden', true);
+        }, 2000);
+      } catch (e) {
+        console.error('[zen-dev-url] toast error:', e);
       }
     },
 
