@@ -5,18 +5,14 @@ All development happens on `dev`.
 
 ## Testing on macOS (Zen Browser)
 
-Run from the repo root after `git pull`:
+One-liner — pull latest, copy files, done. Then quit and reopen Zen.
 
 ```bash
-PROFILE=$(awk '/Default=1/{f=1} f && /^Path=/{print substr($0,6); exit}' \
-  ~/Library/Application\ Support/Zen/profiles.ini)
-CHROME="$HOME/Library/Application Support/Zen/$PROFILE/chrome"
-
-mkdir -p "$CHROME/JS"
-touch "$CHROME/userChrome.css"
-cp zen-dev-url-detector.uc.js "$CHROME/JS/"
-sed -i '' '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css"
-{ printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css"
+git pull && \
+CHROME="$HOME/Library/Application Support/zen/Profiles/3lw53z6b.Default (release)/chrome" && \
+cp zen-dev-url-detector.uc.js "$CHROME/JS/" && \
+sed -i '' '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css" && \
+{ printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css" && \
 echo "Done — restart Zen."
 ```
 
