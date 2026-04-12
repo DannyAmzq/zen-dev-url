@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260412-20';
+  const ZEN_DEV_URL_VERSION = '20260412-21';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -881,12 +881,33 @@
     assert('? matches single char',                 globMatch('app-?.local',  'app-1.local'),             true);
     assert('? does not match two chars',            globMatch('app-?.local',  'app-12.local'),            false);
 
-    // nsIClearDataService API introspection (not a pass/fail test, just info)
+    // nsIClearDataService deep introspection
+    // Logs which methods exist, how many args they take, and whether the flag
+    // constants we use are defined — any undefined here would silently break clearing.
+    const cd = Services.clearData;
+    const hostFn = cd.deleteDataFromHost;
+    const baseFn = cd.deleteDataFromBaseDomain;
     console.log('[zen-dev-url] clearData API:',
-      'deleteDataFromBaseDomain:', typeof Services.clearData.deleteDataFromBaseDomain,
-      'deleteDataFromHost:', typeof Services.clearData.deleteDataFromHost,
-      'deleteDataFromPrincipal:', typeof Services.clearData.deleteDataFromPrincipal
+      '\n  deleteDataFromBaseDomain:', typeof baseFn,
+      '\n  deleteDataFromHost:', typeof hostFn, '(expects', hostFn?.length, 'args)',
+      '\n  deleteDataFromPrincipal:', typeof cd.deleteDataFromPrincipal
     );
+    const ciCD = Ci.nsIClearDataService;
+    const cookieFlag  = ciCD?.CLEAR_COOKIES;
+    const storageFlag = ciCD?.CLEAR_DOM_STORAGES;
+    const cacheFlag   = ciCD?.CLEAR_CACHE;
+    console.log('[zen-dev-url] clearData flags:',
+      '\n  CLEAR_COOKIES:', cookieFlag,
+      '\n  CLEAR_DOM_STORAGES:', storageFlag,
+      '\n  CLEAR_CACHE:', cacheFlag,
+      '\n  combined:', (cookieFlag | storageFlag | cacheFlag)
+    );
+    if (cookieFlag === undefined || storageFlag === undefined || cacheFlag === undefined) {
+      fail++;
+      console.error('[zen-dev-url] FAIL: one or more nsIClearDataService flag constants are undefined — clear site data will not work');
+    } else {
+      pass++;
+    }
 
     // Custom port matching
     function portMatch(customPorts, port) {
