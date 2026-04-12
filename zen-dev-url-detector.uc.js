@@ -38,6 +38,12 @@
     /** Reference to the editable URL input inside the banner */
     _input: null,
 
+    /** Tabs manually forced into dev mode regardless of URL */
+    _forcedBrowsers: new WeakSet(),
+
+    /** Tabs manually suppressed from dev mode (overrides URL match) */
+    _excludedBrowsers: new WeakSet(),
+
     get _enabled() {
       return Services.prefs.getBoolPref(this.PREF, true);
     },
@@ -56,14 +62,28 @@
       Services.prefs.addObserver(this.PREF, this);
       Services.prefs.addObserver('zen.urlbar.dev-indicator.include-zero-host', this);
       Services.prefs.addObserver('zen.urlbar.dev-indicator.include-local-tlds', this);
-      // Alt+Shift+D toggles dev mode.
-      // mozSystemGroup: true fires before web content and other extensions,
-      // so it wins regardless of what else has focus or is registered.
+      // Alt+Shift+D toggles dev mode for the current tab.
+      // Works on any URL — forced-on overrides URL checks, forced-off suppresses
+      // the banner even on dev URLs. mozSystemGroup: true fires before web content.
       window.addEventListener('keydown', (e) => {
         if (e.altKey && e.shiftKey && e.key === 'D') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          Services.prefs.setBoolPref(this.PREF, !this._enabled);
+          if (!this._enabled) return;
+          const browser = gBrowser.selectedBrowser;
+          const forced = this._forcedBrowsers.has(browser);
+          const excluded = this._excludedBrowsers.has(browser);
+          const currentlyShowing = (this._isDevUri(gBrowser.currentURI) && !excluded) || forced;
+          if (currentlyShowing) {
+            this._forcedBrowsers.delete(browser);
+            this._excludedBrowsers.add(browser);
+            this._showToast('Dev mode off');
+          } else {
+            this._excludedBrowsers.delete(browser);
+            this._forcedBrowsers.add(browser);
+            this._showToast('Dev mode on');
+          }
+          this._update();
         }
       }, { capture: true, mozSystemGroup: true });
       this._update();
@@ -309,13 +329,25 @@
      */
     _update(uri) {
       const currentUri = uri || gBrowser.currentURI;
-      const isDev = this._enabled && this._isDevUri(currentUri);
+      const browser = gBrowser.selectedBrowser;
+      const forced = this._forcedBrowsers.has(browser);
+      const excluded = this._excludedBrowsers.has(browser);
+      const isDev = this._enabled && ((this._isDevUri(currentUri) && !excluded) || forced);
       document.documentElement.toggleAttribute('zen-dev-url', isDev);
       if (isDev && currentUri) {
         if (this._field && this._field.getAttribute('contenteditable') === 'false') {
           this._showDisplay(currentUri.spec);
         }
       }
+    },
+
+    /**
+     * Shows a Zen toast notification with the given message.
+     * Falls back silently if the API is unavailable.
+     * @param {string} msg
+     */
+    _showToast(msg) {
+      try { ZenUIManager.showToast(msg); } catch { /* not available */ }
     },
 
     /**
