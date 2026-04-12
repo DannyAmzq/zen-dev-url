@@ -72,6 +72,7 @@ find_default_profile() {
 }
 
 PROFILE_DIR=$(find_default_profile "$PROFILES_INI")
+info "Detected profile: $PROFILE_DIR"
 [[ -d "$PROFILE_DIR" ]] || error "Profile directory not found: $PROFILE_DIR"
 success "Found profile: $PROFILE_DIR"
 
