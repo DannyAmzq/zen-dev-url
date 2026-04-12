@@ -49,7 +49,7 @@ find_default_profile() {
   base_dir=$(dirname "$ini")
 
   # Preferred: [Install{hash}] section — tracks the profile Zen actually launched last
-  rel_path=$(awk '/^\[Install/{in=1} in && /^Default=/{print substr($0,9); exit}' "$ini")
+  rel_path=$(awk '/^\[Install/{inst=1} inst && /^Default=/{print substr($0,9); exit}' "$ini")
 
   # Fallback: profile section marked Default=1
   if [[ -z "$rel_path" ]]; then
