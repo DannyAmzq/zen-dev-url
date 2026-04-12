@@ -28,11 +28,11 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
   ZEN_PROFILES_DIR="$HOME/Library/Application Support/Zen/Profiles"
   PROFILES_INI="$HOME/Library/Application Support/Zen/profiles.ini"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-  ZEN_RESOURCES=$(find /opt /usr/lib /usr/local/lib -name "zen" -type f 2>/dev/null | head -1)
-  ZEN_RESOURCES=$(dirname "$ZEN_RESOURCES" 2>/dev/null)
+  _zen_bin=$(find /opt /usr/lib /usr/local/lib -name "zen" -type f 2>/dev/null | head -1)
+  [[ -z "$_zen_bin" ]] && error "Could not find Zen installation. Is Zen Browser installed?"
+  ZEN_RESOURCES=$(dirname "$_zen_bin")
   ZEN_PROFILES_DIR="$HOME/.zen/Profiles"
   PROFILES_INI="$HOME/.zen/profiles.ini"
-  [[ -z "$ZEN_RESOURCES" ]] && error "Could not find Zen installation. Is Zen Browser installed?"
 else
   error "Unsupported OS: $OSTYPE. Use install.ps1 on Windows."
 fi
