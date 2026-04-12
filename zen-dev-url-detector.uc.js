@@ -347,7 +347,18 @@
      * @param {string} msg
      */
     _showToast(msg) {
-      try { ZenUIManager.showToast(msg); } catch { /* not available */ }
+      // Try Zen's native toast first; if unavailable, use our own
+      try { ZenUIManager.showToast(msg); return; } catch {}
+      let toast = document.getElementById('zen-dev-url-toast');
+      if (!toast) {
+        toast = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+        toast.id = 'zen-dev-url-toast';
+        document.documentElement.appendChild(toast);
+      }
+      clearTimeout(this._toastTimer);
+      toast.textContent = msg;
+      toast.setAttribute('data-visible', '');
+      this._toastTimer = setTimeout(() => toast.removeAttribute('data-visible'), 1800);
     },
 
     /**
