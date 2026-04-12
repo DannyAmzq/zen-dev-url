@@ -347,18 +347,49 @@
      * @param {string} msg
      */
     _showToast(msg) {
-      // Try Zen's native toast first; if unavailable, use our own
-      try { ZenUIManager.showToast(msg); return; } catch {}
-      let toast = document.getElementById('zen-dev-url-toast');
-      if (!toast) {
-        toast = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
-        toast.id = 'zen-dev-url-toast';
-        document.documentElement.appendChild(toast);
+      // Build the same element structure as gZenUIManager.showToast, but set
+      // text directly via label.value to avoid the Fluent l10n requirement.
+      try {
+        const container = document.getElementById('zen-toast-container');
+        if (!container) throw new Error('no container');
+
+        const toast = document.createXULElement('hbox');
+        toast.className = 'zen-toast';
+        const vbox = document.createXULElement('vbox');
+        const label = document.createXULElement('label');
+        label.value = msg;
+        vbox.appendChild(label);
+        toast.appendChild(vbox);
+
+        container.removeAttribute('hidden');
+        container.appendChild(toast);
+
+        // Animate in with Zen's motion library (same spring as native toasts)
+        gZenUIManager.motion.animate(
+          toast, { opacity: [0, 1], scale: [0.5, 1] }, { duration: 0.2, bounce: 0.2 }
+        );
+        // Animate out and clean up after timeout
+        setTimeout(() => {
+          gZenUIManager.motion
+            .animate(toast, { opacity: [1, 0], scale: [1, 0.5] }, { duration: 0.2, bounce: 0 })
+            .then(() => {
+              toast.remove();
+              if (!container.children.length) container.setAttribute('hidden', 'true');
+            });
+        }, 1800);
+      } catch {
+        // Fallback if Zen internals unavailable
+        let toast = document.getElementById('zen-dev-url-toast');
+        if (!toast) {
+          toast = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+          toast.id = 'zen-dev-url-toast';
+          document.documentElement.appendChild(toast);
+        }
+        clearTimeout(this._toastTimer);
+        toast.textContent = msg;
+        toast.setAttribute('data-visible', '');
+        this._toastTimer = setTimeout(() => toast.removeAttribute('data-visible'), 1800);
       }
-      clearTimeout(this._toastTimer);
-      toast.textContent = msg;
-      toast.setAttribute('data-visible', '');
-      this._toastTimer = setTimeout(() => toast.removeAttribute('data-visible'), 1800);
     },
 
     /**
