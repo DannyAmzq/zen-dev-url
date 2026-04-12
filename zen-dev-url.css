@@ -430,9 +430,34 @@
     background-color: #90ee90;
 }
 
-/* Open in private window button */
-#zen-dev-url-private::before {
-    mask-image: url('chrome://browser/skin/privateBrowsing.svg');
+/* Settings panel — action button rows */
+.zen-dev-url-action-row {
+    padding: 4px 14px 6px;
+}
+
+.zen-dev-url-action-btn {
+    appearance: none !important;
+    -moz-appearance: none !important;
+    width: 100%;
+    padding: 5px 10px;
+    background: rgba(255, 107, 53, 0.18) !important;
+    background-image: none !important;
+    border: 1px solid rgba(255, 107, 53, 0.45) !important;
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-family: monospace !important;
+    font-size: 12px !important;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.12s ease;
+}
+
+.zen-dev-url-action-btn:hover {
+    background: rgba(255, 107, 53, 0.32) !important;
+}
+
+.zen-dev-url-action-btn:active {
+    transform: scale(0.98);
 }
 
 /* DevTools panel select dropdown in settings */

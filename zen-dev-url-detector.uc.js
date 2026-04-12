@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260412-13';
+  const ZEN_DEV_URL_VERSION = '20260412-14';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -231,15 +231,15 @@
         setTimeout(() => copyBtn.removeAttribute('data-copied'), 1500);
       });
 
-      // Screenshot button — isolated between separators
-      const screenshotBtn = makeBtn('zen-dev-url-screenshot', 'Take screenshot',
-        () => toggleScreenshot());
-
-      // Clear site data (cookies + localStorage + cache) for the current origin
+      // Clear site data (cookies + localStorage + cache) for the current origin.
+      // getBaseDomain() throws for localhost and IP addresses, so fall back to
+      // the raw host — deleteDataFromBaseDomain still accepts those fine.
       const clearSiteData = makeBtn('zen-dev-url-clear-data', 'Clear site data', async () => {
         try {
           const uri = gBrowser.currentURI;
-          const baseDomain = Services.eTLD.getBaseDomain(uri);
+          let baseDomain;
+          try { baseDomain = Services.eTLD.getBaseDomain(uri); }
+          catch { baseDomain = uri.host; }
           await Services.clearData.deleteDataFromBaseDomain(
             baseDomain,
             /* userRequest */ false,
@@ -252,11 +252,6 @@
         } catch (e) {
           console.error('[zen-dev-url] clear site data failed:', e);
         }
-      });
-
-      // Open current URL in a new private window
-      const privateBtn = makeBtn('zen-dev-url-private', 'Open in private window', () => {
-        OpenBrowserWindow({ private: true, url: gBrowser.currentURI.spec });
       });
 
       // DevTools group: reload, inspector, console, network
@@ -285,12 +280,9 @@
       const viewportEl = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
       viewportEl.id = 'zen-dev-url-viewport';
 
-      // Layout: [field] [copy] | sep | [screenshot] [private] | sep | [clear-data] [reload] [inspector] [console] [network] | sep | [viewport] | sep | [gear]
+      // Layout: [field] [copy] | sep | [clear-data] [reload] [inspector] [console] [network] | sep | [viewport] | sep | [gear]
       banner.appendChild(field);
       banner.appendChild(copyBtn);
-      banner.appendChild(makeSeparator());
-      banner.appendChild(screenshotBtn);
-      banner.appendChild(privateBtn);
       banner.appendChild(makeSeparator());
       banner.appendChild(clearSiteData);
       for (const btn of devButtons) {
@@ -593,9 +585,30 @@
     },
 
     /**
+     * Creates a full-width action button row for the settings panel.
+     * Clicking it executes the action and closes the panel.
+     * @param {string} labelText
+     * @param {Function} action
+     * @returns {HTMLElement}
+     */
+    _makeActionRow(labelText, action) {
+      const row = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+      row.className = 'zen-dev-url-action-row';
+      const btn = document.createElementNS('http://www.w3.org/1999/xhtml', 'button');
+      btn.className = 'zen-dev-url-action-btn';
+      btn.textContent = labelText;
+      btn.addEventListener('click', () => {
+        action();
+        detector._closeSettings();
+      });
+      row.appendChild(btn);
+      return row;
+    },
+
+    /**
      * Creates and appends the floating settings panel to the document root.
      * The panel is hidden by default and shown by _openSettings().
-     * Sections: Detection | Network
+     * Sections: Detection | Network | Page | DevTools | Actions
      */
     _createSettingsPanel() {
       const panel = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
@@ -656,21 +669,46 @@
       // ── DevTools ──────────────────────────────────────────────
       panel.appendChild(this._makePanelDivider());
       panel.appendChild(this._makeSectionHeader('DevTools'));
-      panel.appendChild(this._makeToggleRow(
+      const autoOpenRow = this._makeToggleRow(
         'Auto-open DevTools on dev URLs',
         'zen.urlbar.dev-indicator.auto-open-devtools',
         false
-      ));
-      panel.appendChild(this._makeSelectRow(
+      );
+      panel.appendChild(autoOpenRow);
+      // Panel selector — indented sub-option, only active when auto-open is on
+      const panelSelectRow = this._makeSelectRow(
         'Panel',
         'zen.urlbar.dev-indicator.auto-open-panel',
         [
-          { value: 'webconsole',  label: 'Console'   },
-          { value: 'netmonitor',  label: 'Network'   },
-          { value: 'inspector',   label: 'Inspector' },
+          { value: 'webconsole', label: 'Console'   },
+          { value: 'netmonitor', label: 'Network'   },
+          { value: 'inspector',  label: 'Inspector' },
         ],
         'webconsole'
-      ));
+      );
+      panelSelectRow.style.paddingLeft = '28px';
+      const panelSelect = panelSelectRow.querySelector('select');
+      const syncPanelRow = () => {
+        const on = Services.prefs.getBoolPref('zen.urlbar.dev-indicator.auto-open-devtools', false);
+        panelSelectRow.style.opacity = on ? '1' : '0.4';
+        panelSelect.disabled = !on;
+      };
+      syncPanelRow();
+      autoOpenRow.querySelector('input').addEventListener('change', syncPanelRow);
+      panel.appendChild(panelSelectRow);
+
+      // ── Actions ───────────────────────────────────────────────
+      panel.appendChild(this._makePanelDivider());
+      panel.appendChild(this._makeSectionHeader('Actions'));
+      panel.appendChild(this._makeActionRow('Open in private window', () => {
+        const url = gBrowser.currentURI.spec;
+        const win = OpenBrowserWindow({ private: true });
+        // Navigate after the chrome finishes loading — URL arg is unreliable
+        win.addEventListener('load', () => {
+          try { win.openTrustedLinkIn(url, 'current'); }
+          catch { win.gURLBar.value = url; win.gURLBar.handleCommand(); }
+        }, { once: true });
+      }));
 
       document.documentElement.appendChild(panel);
       this._settingsPanel = panel;
