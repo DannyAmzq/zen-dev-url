@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260412-18';
+  const ZEN_DEV_URL_VERSION = '20260412-19';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -233,9 +233,10 @@
 
       // Clear site data (cookies + localStorage + cache) for the current origin.
       // getBaseDomain() throws for localhost/IPs, so fall back to uri.host.
-      // deleteDataFromBaseDomain was added in a later Firefox version than some
-      // Zen builds ship; fall back to deleteDataFromHost which is always present.
-      const clearSiteData = makeBtn('zen-dev-url-clear-data', 'Clear site data', async () => {
+      // This Zen build's nsIClearDataService uses the OLD callback-based API —
+      // the 4th argument is a required { onDataDeleted() } callback, not a Promise.
+      // We pick whichever method is available and always pass the callback.
+      const clearSiteData = makeBtn('zen-dev-url-clear-data', 'Clear site data', () => {
         try {
           const uri = gBrowser.currentURI;
           let host;
@@ -245,13 +246,14 @@
             Ci.nsIClearDataService.CLEAR_COOKIES |
             Ci.nsIClearDataService.CLEAR_DOM_STORAGES |
             Ci.nsIClearDataService.CLEAR_CACHE;
-          if (typeof Services.clearData.deleteDataFromBaseDomain === 'function') {
-            await Services.clearData.deleteDataFromBaseDomain(host, false, flags);
-          } else {
-            await Services.clearData.deleteDataFromHost(host, false, flags);
-          }
-          clearSiteData.setAttribute('data-done', '');
-          setTimeout(() => clearSiteData.removeAttribute('data-done'), 1500);
+          const onDone = () => {
+            clearSiteData.setAttribute('data-done', '');
+            setTimeout(() => clearSiteData.removeAttribute('data-done'), 1500);
+          };
+          const cb = { onDataDeleted() { onDone(); } };
+          const fn = (Services.clearData.deleteDataFromBaseDomain ?? Services.clearData.deleteDataFromHost)
+            .bind(Services.clearData);
+          fn(host, false, flags, cb);
         } catch (e) {
           console.error('[zen-dev-url] clear site data failed:', e);
         }
@@ -716,36 +718,27 @@
             'gBrowser:', !!win.gBrowser,
             'gURLBar:', !!win.gURLBar,
             'selectedBrowser:', !!win.gBrowser?.selectedBrowser);
-          // Defer one tick so all chrome init finishes before we navigate
+          // Defer one tick so all chrome init finishes before we navigate.
+          // fixupAndLoadURIString lives on gBrowser (the tabbrowser), NOT on
+          // selectedBrowser (the <browser> element) — calling it there is a
+          // silent no-op, which is why it logged "ok" but never navigated.
           win.setTimeout(() => {
-            // Try fixupAndLoadURIString first (most direct, no security principal dance)
             try {
-              win.gBrowser.selectedBrowser.fixupAndLoadURIString(url, {
+              win.gBrowser.fixupAndLoadURIString(url, {
                 triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
               });
-              console.log('[zen-dev-url] private win: fixupAndLoadURIString ok');
+              console.log('[zen-dev-url] private win: gBrowser.fixupAndLoadURIString ok');
               return;
             } catch (e1) {
               console.warn('[zen-dev-url] private win: fixupAndLoadURIString failed:', e1.message);
             }
-            // Fallback: URLBar
+            // Fallback: URLBar (always present, works in all Zen builds)
             try {
               win.gURLBar.value = url;
               win.gURLBar.handleCommand();
               console.log('[zen-dev-url] private win: URLBar handleCommand ok');
-              return;
             } catch (e2) {
-              console.warn('[zen-dev-url] private win: URLBar failed:', e2.message);
-            }
-            // Last resort: loadURI via nsIWebNavigation
-            try {
-              win.gBrowser.selectedBrowser.webNavigation.loadURI(
-                Services.io.newURI(url),
-                { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() }
-              );
-              console.log('[zen-dev-url] private win: webNavigation.loadURI ok');
-            } catch (e3) {
-              console.error('[zen-dev-url] private win: all nav methods failed:', e3.message);
+              console.error('[zen-dev-url] private win: all nav methods failed:', e2.message);
             }
           }, 0);
         }, { once: true });
