@@ -10,8 +10,10 @@ Run from the repo root after `git pull`:
 ```bash
 PROFILE=$(awk '/Default=1/{f=1} f && /^Path=/{print substr($0,6); exit}' \
   ~/Library/Application\ Support/Zen/profiles.ini)
-CHROME="$HOME/Library/Application Support/Zen/Profiles/$PROFILE/chrome"
+CHROME="$HOME/Library/Application Support/Zen/$PROFILE/chrome"
 
+mkdir -p "$CHROME/JS"
+touch "$CHROME/userChrome.css"
 cp zen-dev-url-detector.uc.js "$CHROME/JS/"
 sed -i '' '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css"
 { printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css"
