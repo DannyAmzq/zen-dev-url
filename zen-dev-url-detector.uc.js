@@ -98,11 +98,6 @@
       const banner = document.createXULElement('hbox');
       banner.id = 'zen-dev-url-banner';
 
-      // "DEV" badge shown on the left
-      const badge = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
-      badge.id = 'zen-dev-url-badge';
-      badge.textContent = 'DEV';
-
       // Single contenteditable div — always the same element so text never
       // shifts position. Shows styled protocol/host HTML in display mode;
       // switches to plain editable text on mousedown.
@@ -256,8 +251,7 @@
         makeBtn('zen-dev-url-network', 'Open network panel', () => togglePanel('netmonitor')),
       ];
 
-      // Layout: [badge] [field] [copy] | sep | [screenshot] | sep | [reload] [inspector] [console] [network] | sep | [gear]
-      banner.appendChild(badge);
+      // Layout: [field] [copy] | sep | [screenshot] | sep | [reload] [inspector] [console] [network] | sep | [gear]
       banner.appendChild(field);
       banner.appendChild(copyBtn);
       banner.appendChild(makeSeparator());
@@ -347,36 +341,23 @@
      * @param {string} msg
      */
     _showToast(msg) {
-      // Build the same element structure as gZenUIManager.showToast, but set
-      // text directly via label.value to avoid the Fluent l10n requirement.
+      // Call gZenUIManager.showToast with a unique non-l10n ID so it creates
+      // the native toast element + animation, then immediately override the
+      // label's text before Fluent gets a chance to resolve the (unknown) ID.
+      // showToast's element creation is synchronous (before its first await),
+      // so lastElementChild of the container is our toast right after the call.
       try {
-        const container = document.getElementById('zen-toast-container');
-        if (!container) throw new Error('no container');
-
-        const toast = document.createXULElement('hbox');
-        toast.className = 'zen-toast';
-        const vbox = document.createXULElement('vbox');
-        const label = document.createXULElement('label');
-        label.value = msg;
-        vbox.appendChild(label);
-        toast.appendChild(vbox);
-
-        container.removeAttribute('hidden');
-        container.appendChild(toast);
-
-        // Animate in with Zen's motion library (same spring as native toasts)
-        gZenUIManager.motion.animate(
-          toast, { opacity: [0, 1], scale: [0.5, 1] }, { duration: 0.2, bounce: 0.2 }
-        );
-        // Animate out and clean up after timeout
-        setTimeout(() => {
-          gZenUIManager.motion
-            .animate(toast, { opacity: [1, 0], scale: [1, 0.5] }, { duration: 0.2, bounce: 0 })
-            .then(() => {
-              toast.remove();
-              if (!container.children.length) container.setAttribute('hidden', 'true');
-            });
-        }, 1800);
+        const toastId = 'zen-dev-url-' + (msg.includes('on') ? 'on' : 'off');
+        gZenUIManager.showToast(toastId, { timeout: 1800 });
+        const label = document
+          .getElementById('zen-toast-container')
+          ?.lastElementChild
+          ?.querySelector('label');
+        if (label) {
+          label.removeAttribute('data-l10n-id');
+          label.removeAttribute('data-l10n-args');
+          label.value = msg;
+        }
       } catch {
         // Fallback if Zen internals unavailable
         let toast = document.getElementById('zen-dev-url-toast');

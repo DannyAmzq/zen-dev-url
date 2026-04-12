@@ -117,21 +117,6 @@
         color-mix(in srgb, #ff6b35 35%, var(--toolbar-bgcolor));
 }
 
-/* DEV pill badge on the left */
-#zen-dev-url-badge {
-    flex-shrink: 0;
-    background: #ff6b35;
-    color: #ffffff;
-    font-size: 10px;
-    font-weight: 700;
-    font-family: monospace;
-    letter-spacing: 0.05em;
-    padding: 2px 7px;
-    border-radius: 4px;
-    margin-right: 8px;
-    user-select: none;
-}
-
 /* Single contenteditable div — display and edit mode in one element */
 #zen-dev-url-field {
     flex: 1;
