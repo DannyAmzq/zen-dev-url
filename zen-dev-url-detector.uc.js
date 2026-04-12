@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260412-8';
+  const ZEN_DEV_URL_VERSION = '20260412-9';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -65,6 +65,7 @@
       Services.prefs.addObserver(this.PREF, this);
       Services.prefs.addObserver('zen.urlbar.dev-indicator.include-zero-host', this);
       Services.prefs.addObserver('zen.urlbar.dev-indicator.include-local-tlds', this);
+      Services.prefs.addObserver('zen.urlbar.dev-indicator.include-file-urls', this);
       // Alt+Shift+D toggles dev mode for the current tab.
       // Works on any URL — forced-on overrides URL checks, forced-off suppresses
       // the banner even on dev URLs. mozSystemGroup: true fires before web content.
@@ -80,11 +81,11 @@
           if (currentlyShowing) {
             this._forcedBrowsers.delete(browser);
             this._excludedBrowsers.add(browser);
-            this._showToast('Dev banner hidden for this tab');
+            this._showToast('◎  Dev banner off');
           } else {
             this._excludedBrowsers.delete(browser);
             this._forcedBrowsers.add(browser);
-            this._showToast('Dev banner enabled for this tab');
+            this._showToast('◉  Dev banner on');
           }
           this._update();
         }
@@ -306,6 +307,9 @@
       if (!uri) return false;
       try {
         const { scheme } = uri;
+        if (scheme === 'file') {
+          return Services.prefs.getBoolPref('zen.urlbar.dev-indicator.include-file-urls', false);
+        }
         if (scheme !== 'http' && scheme !== 'https') return false;
         const host = uri.host ?? '';
         if (this._devHosts.has(host)) return true;
@@ -428,6 +432,11 @@
         'Show for .local / .test / .internal',
         'zen.urlbar.dev-indicator.include-local-tlds',
         true
+      ));
+      panel.appendChild(this._makeToggleRow(
+        'Show for file://',
+        'zen.urlbar.dev-indicator.include-file-urls',
+        false
       ));
       document.documentElement.appendChild(panel);
       this._settingsPanel = panel;
