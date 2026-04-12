@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260412-22';
+  const ZEN_DEV_URL_VERSION = '20260412-23';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -236,31 +236,31 @@
       // This Zen build's nsIClearDataService uses the OLD callback-based API —
       // the 4th argument is a required { onDataDeleted() } callback, not a Promise.
       // We pick whichever method is available and always pass the callback.
-      const clearSiteData = makeBtn('zen-dev-url-clear-data', 'Clear site data', () => {
+      const clearSiteData = makeBtn('zen-dev-url-clear-data', 'Clear site data + hard reload', () => {
         try {
           const uri = gBrowser.currentURI;
           let host;
           try { host = Services.eTLD.getBaseDomain(uri); }
           catch { host = uri.host; }
-          // CLEAR_CACHE was renamed in newer Firefox/Zen builds — try all known names
+          // Use CLEAR_ALL_CACHES (network+image+JS+CSS+preflight+auth caches
+          // combined) if available, otherwise fall back to individual names.
           const ciCD = Ci.nsIClearDataService;
-          const cacheFlag = ciCD.CLEAR_CACHE ?? ciCD.CLEAR_NETWORK_CACHE ?? ciCD.CLEAR_IMAGE_CACHE ?? 0;
-          const flags = (ciCD.CLEAR_COOKIES ?? 0) | (ciCD.CLEAR_DOM_STORAGES ?? 0) | cacheFlag;
-          const onDone = () => {
-            console.log('[zen-dev-url] clear site data: onDataDeleted fired ✓');
+          const cacheFlags = ciCD.CLEAR_ALL_CACHES
+            ?? ((ciCD.CLEAR_CACHE ?? ciCD.CLEAR_NETWORK_CACHE ?? 0) | (ciCD.CLEAR_IMAGE_CACHE ?? 0) | (ciCD.CLEAR_JS_CACHE ?? 0) | (ciCD.CLEAR_CSS_CACHE ?? 0));
+          const flags = (ciCD.CLEAR_COOKIES ?? 0) | (ciCD.CLEAR_DOM_STORAGES ?? 0) | cacheFlags;
+          const cb = { onDataDeleted(resultFlags) {
+            console.log(`[zen-dev-url] clear site data: done (resultFlags=${resultFlags}) — hard reloading`);
             clearSiteData.setAttribute('data-done', '');
             setTimeout(() => clearSiteData.removeAttribute('data-done'), 1500);
-          };
-          const cb = { onDataDeleted(resultFlags) {
-            console.log('[zen-dev-url] clear site data: resultFlags =', resultFlags);
-            onDone();
+            // Hard reload AFTER confirmed deletion so we know the page fetches fresh
+            gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
           } };
           const hasBaseDomain = typeof Services.clearData.deleteDataFromBaseDomain === 'function';
           const fn = (hasBaseDomain
             ? Services.clearData.deleteDataFromBaseDomain
             : Services.clearData.deleteDataFromHost
           ).bind(Services.clearData);
-          console.log(`[zen-dev-url] clear site data: host="${host}" method=${hasBaseDomain ? 'deleteDataFromBaseDomain' : 'deleteDataFromHost'}`);
+          console.log(`[zen-dev-url] clear site data: host="${host}" flags=${flags} method=${hasBaseDomain ? 'deleteDataFromBaseDomain' : 'deleteDataFromHost'}`);
           fn(host, false, flags, cb);
         } catch (e) {
           console.error('[zen-dev-url] clear site data failed:', e);
