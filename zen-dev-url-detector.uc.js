@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260412-15';
+  const ZEN_DEV_URL_VERSION = '20260412-16';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -257,10 +257,12 @@
         }
       });
 
-      // DevTools group: reload, inspector, console, network
+      // Reload — grouped visually with clear-data (both are page-state tools)
+      const reloadBtn = makeBtn('zen-dev-url-clear-refresh', 'Clear cache and reload',
+        () => gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE));
+
+      // DevTools group: inspector, console, network (separate from page tools)
       const devButtons = [
-        makeBtn('zen-dev-url-clear-refresh', 'Clear cache and reload',
-          () => gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE)),
         makeBtn('zen-dev-url-inspector', 'Inspect element', () => {
           const dt = getDevTools();
           if (!dt) return;
@@ -283,11 +285,12 @@
       const viewportEl = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
       viewportEl.id = 'zen-dev-url-viewport';
 
-      // Layout: [field] [copy] | sep | [clear-data] | sep | [reload] [inspector] [console] [network] | sep | [viewport] | sep | [gear]
+      // Layout: [field] [copy] | sep | [clear-data] [reload] | sep | [inspector] [console] [network] | sep | [viewport] | sep | [gear]
       banner.appendChild(field);
       banner.appendChild(copyBtn);
       banner.appendChild(makeSeparator());
       banner.appendChild(clearSiteData);
+      banner.appendChild(reloadBtn);
       banner.appendChild(makeSeparator());
       for (const btn of devButtons) {
         banner.appendChild(btn);
@@ -707,10 +710,11 @@
       panel.appendChild(this._makeActionRow('Open in private window', () => {
         const url = gBrowser.currentURI.spec;
         const win = OpenBrowserWindow({ private: true });
-        // Navigate after the chrome finishes loading — URL arg is unreliable
+        // openTrustedLinkIn isn't reliably available; use the URLBar instead —
+        // it's always initialised by the time the window 'load' event fires.
         win.addEventListener('load', () => {
-          try { win.openTrustedLinkIn(url, 'current'); }
-          catch { win.gURLBar.value = url; win.gURLBar.handleCommand(); }
+          win.gURLBar.value = url;
+          win.gURLBar.handleCommand();
         }, { once: true });
       }));
 
@@ -755,6 +759,12 @@
       this._settingsPanel.style.display = 'block';
 
       this._outsideClickHandler = (e) => {
+        // Native <select> option clicks are handled by the OS; by the time the
+        // click event fires on the document, e.target is the select element
+        // itself (inside the panel). Adding an explicit nodeName guard here as
+        // belt-and-suspenders — we must NOT close while a select is active.
+        const tag = e.target.nodeName?.toLowerCase();
+        if (tag === 'select' || tag === 'option') return;
         const gear = document.getElementById('zen-dev-url-settings');
         if (!this._settingsPanel.contains(e.target) && e.target !== gear) {
           this._closeSettings();
@@ -763,7 +773,9 @@
       this._escapeHandler = (e) => {
         if (e.key === 'Escape') this._closeSettings();
       };
-      document.addEventListener('mousedown', this._outsideClickHandler, true);
+      // Use 'click' (not 'mousedown') so the select change event fires and
+      // saves the value BEFORE we evaluate whether to close the panel.
+      document.addEventListener('click', this._outsideClickHandler, true);
       window.addEventListener('keydown', this._escapeHandler, true);
     },
 
@@ -774,7 +786,7 @@
       if (!this._settingsPanel) return;
       this._settingsPanel.style.display = 'none';
       if (this._outsideClickHandler) {
-        document.removeEventListener('mousedown', this._outsideClickHandler, true);
+        document.removeEventListener('click', this._outsideClickHandler, true);
         this._outsideClickHandler = null;
       }
       if (this._escapeHandler) {
