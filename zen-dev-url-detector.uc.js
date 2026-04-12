@@ -27,7 +27,7 @@
     PREF: 'zen.urlbar.show-dev-indicator',
 
     /** Exact hostnames always treated as dev */
-    _devHosts: new Set(['localhost', '127.0.0.1', '0.0.0.0', '[::1]']),
+    _devHosts: new Set(['localhost', '127.0.0.1', '[::1]']),
 
     /** TLD suffixes always treated as dev */
     _devTLDs: ['.local', '.localhost', '.internal', '.test'],
@@ -54,6 +54,8 @@
       window.addEventListener('TabSelect', this);
       // Listen for pref changes
       Services.prefs.addObserver(this.PREF, this);
+      Services.prefs.addObserver('zen.urlbar.dev-indicator.include-zero-host', this);
+      Services.prefs.addObserver('zen.urlbar.dev-indicator.include-local-tlds', this);
       // Alt+Shift+D toggles dev mode.
       // mozSystemGroup: true fires before web content and other extensions,
       // so it wins regardless of what else has focus or is registered.
@@ -234,7 +236,7 @@
         makeBtn('zen-dev-url-network', 'Open network panel', () => togglePanel('netmonitor')),
       ];
 
-      // Layout: [badge] [field] [copy] | sep | [screenshot] | sep | [reload] [inspector] [console] [network]
+      // Layout: [badge] [field] [copy] | sep | [screenshot] | sep | [reload] [inspector] [console] [network] | sep | [gear]
       banner.appendChild(badge);
       banner.appendChild(field);
       banner.appendChild(copyBtn);
@@ -244,12 +246,16 @@
       for (const btn of devButtons) {
         banner.appendChild(btn);
       }
+      banner.appendChild(makeSeparator());
+      const settingsBtn = makeBtn('zen-dev-url-settings', 'Settings', () => detector._openSettings());
+      banner.appendChild(settingsBtn);
 
       document.documentElement.appendChild(banner);
       this._banner = banner;
       this._field = field;
       this._showDisplay = showDisplay;
       this._repositionBanner();
+      this._createSettingsPanel();
       // Re-align banner if window is resized or sidebar width changes
       window.addEventListener('resize', () => this._repositionBanner());
     },
@@ -286,7 +292,12 @@
         if (scheme !== 'http' && scheme !== 'https') return false;
         const host = uri.host ?? '';
         if (this._devHosts.has(host)) return true;
-        if (this._devTLDs.some(tld => host.endsWith(tld))) return true;
+        if (host === '0.0.0.0' &&
+            Services.prefs.getBoolPref('zen.urlbar.dev-indicator.include-zero-host', true))
+          return true;
+        if (Services.prefs.getBoolPref('zen.urlbar.dev-indicator.include-local-tlds', true) &&
+            this._devTLDs.some(tld => host.endsWith(tld)))
+          return true;
         return false;
       } catch { return false; }
     },
@@ -304,6 +315,120 @@
         if (this._field && this._field.getAttribute('contenteditable') === 'false') {
           this._showDisplay(currentUri.spec);
         }
+      }
+    },
+
+    /**
+     * Creates a single toggle row for the settings panel.
+     * @param {string} labelText - Human-readable label
+     * @param {string} prefKey - about:config preference key
+     * @param {boolean} defaultVal - Default value if pref is unset
+     * @returns {HTMLElement}
+     */
+    _makeToggleRow(labelText, prefKey, defaultVal) {
+      const row = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+      row.className = 'zen-dev-url-toggle-row';
+
+      const label = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+      label.textContent = labelText;
+
+      const toggleLabel = document.createElementNS('http://www.w3.org/1999/xhtml', 'label');
+      toggleLabel.className = 'zen-dev-url-toggle';
+
+      const input = document.createElementNS('http://www.w3.org/1999/xhtml', 'input');
+      input.type = 'checkbox';
+      input.dataset.pref = prefKey;
+      input.checked = Services.prefs.getBoolPref(prefKey, defaultVal);
+      input.addEventListener('change', () => {
+        Services.prefs.setBoolPref(prefKey, input.checked);
+        detector._update();
+      });
+
+      const track = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+      track.className = 'zen-dev-url-toggle-track';
+
+      toggleLabel.appendChild(input);
+      toggleLabel.appendChild(track);
+      row.appendChild(label);
+      row.appendChild(toggleLabel);
+      return row;
+    },
+
+    /**
+     * Creates and appends the floating settings panel to the document root.
+     * The panel is hidden by default and shown by _openSettings().
+     */
+    _createSettingsPanel() {
+      const panel = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+      panel.id = 'zen-dev-url-settings-panel';
+      panel.appendChild(this._makeToggleRow(
+        'Show for 0.0.0.0',
+        'zen.urlbar.dev-indicator.include-zero-host',
+        true
+      ));
+      panel.appendChild(this._makeToggleRow(
+        'Show for .local / .test / .internal',
+        'zen.urlbar.dev-indicator.include-local-tlds',
+        true
+      ));
+      document.documentElement.appendChild(panel);
+      this._settingsPanel = panel;
+    },
+
+    /**
+     * Repositions the settings panel so it sits below and right-aligns with
+     * the gear button.
+     */
+    _repositionPanel() {
+      const gear = document.getElementById('zen-dev-url-settings');
+      if (!gear || !this._settingsPanel) return;
+      const rect = gear.getBoundingClientRect();
+      this._settingsPanel.style.top = (rect.bottom + 4) + 'px';
+      this._settingsPanel.style.left = (rect.right - 260) + 'px';
+    },
+
+    /**
+     * Opens the settings panel (or closes it if already open).
+     * Refreshes checkbox states from live prefs on each open.
+     */
+    _openSettings() {
+      if (this._settingsPanel && this._settingsPanel.style.display === 'block') {
+        this._closeSettings();
+        return;
+      }
+      // Refresh checkbox states from live prefs
+      this._settingsPanel.querySelectorAll('input[data-pref]').forEach(input => {
+        input.checked = Services.prefs.getBoolPref(input.dataset.pref, true);
+      });
+      this._repositionPanel();
+      this._settingsPanel.style.display = 'block';
+
+      this._outsideClickHandler = (e) => {
+        const gear = document.getElementById('zen-dev-url-settings');
+        if (!this._settingsPanel.contains(e.target) && e.target !== gear) {
+          this._closeSettings();
+        }
+      };
+      this._escapeHandler = (e) => {
+        if (e.key === 'Escape') this._closeSettings();
+      };
+      document.addEventListener('mousedown', this._outsideClickHandler, true);
+      window.addEventListener('keydown', this._escapeHandler, true);
+    },
+
+    /**
+     * Closes the settings panel and cleans up its event listeners.
+     */
+    _closeSettings() {
+      if (!this._settingsPanel) return;
+      this._settingsPanel.style.display = 'none';
+      if (this._outsideClickHandler) {
+        document.removeEventListener('mousedown', this._outsideClickHandler, true);
+        this._outsideClickHandler = null;
+      }
+      if (this._escapeHandler) {
+        window.removeEventListener('keydown', this._escapeHandler, true);
+        this._escapeHandler = null;
       }
     },
 

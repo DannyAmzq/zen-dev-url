@@ -254,3 +254,84 @@
 #zen-dev-url-network::before {
     mask-image: url('chrome://devtools/skin/images/tool-network.svg');
 }
+
+/* Gear / settings button icon */
+#zen-dev-url-settings::before {
+    mask-image: url('chrome://global/skin/icons/settings.svg');
+}
+
+/* Settings panel */
+#zen-dev-url-settings-panel {
+    display: none;
+    position: fixed;
+    z-index: 10000;
+    min-width: 260px;
+    background: color-mix(in srgb, #ff6b35 18%, var(--toolbar-bgcolor));
+    border: 1.5px solid #ff6b35;
+    border-radius: 6px;
+    padding: 8px 0;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    font-family: monospace;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* Toggle rows */
+.zen-dev-url-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 14px;
+    gap: 16px;
+    user-select: none;
+}
+.zen-dev-url-toggle-row:hover {
+    background: rgba(255, 107, 53, 0.15);
+}
+.zen-dev-url-toggle-row > span {
+    flex: 1;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* Toggle switch */
+.zen-dev-url-toggle {
+    display: flex;
+    align-items: center;
+}
+.zen-dev-url-toggle input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+.zen-dev-url-toggle-track {
+    display: inline-block;
+    position: relative;
+    width: 32px;
+    height: 18px;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 9px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+.zen-dev-url-toggle-track::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.6);
+    transition: transform 0.15s ease, background 0.15s ease;
+}
+.zen-dev-url-toggle input:checked + .zen-dev-url-toggle-track {
+    background: #ff6b35;
+    border-color: #ff6b35;
+}
+.zen-dev-url-toggle input:checked + .zen-dev-url-toggle-track::after {
+    transform: translateX(14px);
+    background: #fff;
+}
