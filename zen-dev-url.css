@@ -159,8 +159,8 @@
     width: 26px;
     height: 22px;
     padding: 0;
-    background-color: rgba(0, 0, 0, 0.28);
-    border: 1px solid rgba(255, 255, 255, 0.45);
+    background-color: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.55);
     border-radius: 4px;
     cursor: pointer;
     position: relative;
