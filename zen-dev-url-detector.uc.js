@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260412-16';
+  const ZEN_DEV_URL_VERSION = '20260412-17';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -709,12 +709,45 @@
       panel.appendChild(this._makeSectionHeader('Actions'));
       panel.appendChild(this._makeActionRow('Open in private window', () => {
         const url = gBrowser.currentURI.spec;
+        console.log('[zen-dev-url] opening private window for:', url);
         const win = OpenBrowserWindow({ private: true });
-        // openTrustedLinkIn isn't reliably available; use the URLBar instead —
-        // it's always initialised by the time the window 'load' event fires.
         win.addEventListener('load', () => {
-          win.gURLBar.value = url;
-          win.gURLBar.handleCommand();
+          console.log('[zen-dev-url] private win load fired.',
+            'gBrowser:', !!win.gBrowser,
+            'gURLBar:', !!win.gURLBar,
+            'selectedBrowser:', !!win.gBrowser?.selectedBrowser);
+          // Defer one tick so all chrome init finishes before we navigate
+          win.setTimeout(() => {
+            // Try fixupAndLoadURIString first (most direct, no security principal dance)
+            try {
+              win.gBrowser.selectedBrowser.fixupAndLoadURIString(url, {
+                triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+              });
+              console.log('[zen-dev-url] private win: fixupAndLoadURIString ok');
+              return;
+            } catch (e1) {
+              console.warn('[zen-dev-url] private win: fixupAndLoadURIString failed:', e1.message);
+            }
+            // Fallback: URLBar
+            try {
+              win.gURLBar.value = url;
+              win.gURLBar.handleCommand();
+              console.log('[zen-dev-url] private win: URLBar handleCommand ok');
+              return;
+            } catch (e2) {
+              console.warn('[zen-dev-url] private win: URLBar failed:', e2.message);
+            }
+            // Last resort: loadURI via nsIWebNavigation
+            try {
+              win.gBrowser.selectedBrowser.webNavigation.loadURI(
+                Services.io.newURI(url),
+                { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() }
+              );
+              console.log('[zen-dev-url] private win: webNavigation.loadURI ok');
+            } catch (e3) {
+              console.error('[zen-dev-url] private win: all nav methods failed:', e3.message);
+            }
+          }, 0);
         }, { once: true });
       }));
 
@@ -759,23 +792,24 @@
       this._settingsPanel.style.display = 'block';
 
       this._outsideClickHandler = (e) => {
-        // Native <select> option clicks are handled by the OS; by the time the
-        // click event fires on the document, e.target is the select element
-        // itself (inside the panel). Adding an explicit nodeName guard here as
-        // belt-and-suspenders — we must NOT close while a select is active.
-        const tag = e.target.nodeName?.toLowerCase();
-        if (tag === 'select' || tag === 'option') return;
+        // e.target can be an *anonymous* XUL node inside a native <select>
+        // (Firefox renders selects with internal chrome content). contains()
+        // only sees the regular DOM, so it misses anonymous nodes and returns
+        // false even though the click is inside the panel.
+        // composedPath() walks the full composed tree including anonymous/shadow
+        // content, giving us a reliable "is this click inside the panel?" check.
         const gear = document.getElementById('zen-dev-url-settings');
-        if (!this._settingsPanel.contains(e.target) && e.target !== gear) {
-          this._closeSettings();
-        }
+        const panel = this._settingsPanel;
+        const path = e.composedPath();
+        const inside = path.some(el => el === panel || el === gear);
+        console.log(`[zen-dev-url] mousedown: target=${e.target.nodeName} inside=${inside}`);
+        if (inside) return;
+        this._closeSettings();
       };
       this._escapeHandler = (e) => {
         if (e.key === 'Escape') this._closeSettings();
       };
-      // Use 'click' (not 'mousedown') so the select change event fires and
-      // saves the value BEFORE we evaluate whether to close the panel.
-      document.addEventListener('click', this._outsideClickHandler, true);
+      document.addEventListener('mousedown', this._outsideClickHandler, true);
       window.addEventListener('keydown', this._escapeHandler, true);
     },
 
@@ -786,7 +820,7 @@
       if (!this._settingsPanel) return;
       this._settingsPanel.style.display = 'none';
       if (this._outsideClickHandler) {
-        document.removeEventListener('click', this._outsideClickHandler, true);
+        document.removeEventListener('mousedown', this._outsideClickHandler, true);
         this._outsideClickHandler = null;
       }
       if (this._escapeHandler) {
@@ -811,6 +845,58 @@
   };
 
   window.__zenDevUrlDetector = detector;
+
+  // ── Self-tests ────────────────────────────────────────────────────────────
+  // Tests for pure logic that doesn't need browser APIs.
+  // Failures are logged as errors and are visible in the browser console.
+  (function runSelfTests() {
+    let pass = 0, fail = 0;
+
+    function assert(description, actual, expected) {
+      if (actual === expected) {
+        pass++;
+      } else {
+        fail++;
+        console.error(`[zen-dev-url] FAIL: ${description}\n  expected: ${expected}\n  got:      ${actual}`);
+      }
+    }
+
+    // Glob pattern matching (same logic as _isDevUri custom patterns)
+    function globMatch(pattern, host) {
+      const re = new RegExp(
+        '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$'
+      );
+      return re.test(host);
+    }
+
+    assert('*.vercel.app matches subdomain',        globMatch('*.vercel.app', 'myapp.vercel.app'),       true);
+    assert('*.vercel.app matches deep subdomain',   globMatch('*.vercel.app', 'pr-123.myapp.vercel.app'), true);
+    assert('*.vercel.app does not match bare tld',  globMatch('*.vercel.app', 'vercel.app'),              false);
+    assert('*.ngrok.io matches subdomain',          globMatch('*.ngrok.io',   'abc123.ngrok.io'),         true);
+    assert('*.ngrok.io does not cross tlds',        globMatch('*.ngrok.io',   'abc.ngrok.com'),           false);
+    assert('exact host matches',                    globMatch('myapp.local',  'myapp.local'),             true);
+    assert('exact host does not match other',       globMatch('myapp.local',  'other.local'),             false);
+    assert('? matches single char',                 globMatch('app-?.local',  'app-1.local'),             true);
+    assert('? does not match two chars',            globMatch('app-?.local',  'app-12.local'),            false);
+
+    // Custom port matching
+    function portMatch(customPorts, port) {
+      if (!customPorts || port <= 0) return false;
+      return customPorts.split(',').map(p => p.trim()).filter(Boolean).includes(String(port));
+    }
+
+    assert('port 3000 in list',     portMatch('3000, 5173, 8080', 3000), true);
+    assert('port 5173 in list',     portMatch('3000, 5173, 8080', 5173), true);
+    assert('port 9000 not in list', portMatch('3000, 5173, 8080', 9000), false);
+    assert('port -1 never matches', portMatch('3000', -1),               false);
+    assert('empty list never matches', portMatch('', 3000),              false);
+
+    const status = fail === 0
+      ? `%c[zen-dev-url] self-tests: ${pass}/${pass} passed`
+      : `%c[zen-dev-url] self-tests: ${fail} FAILED, ${pass} passed`;
+    const style = fail === 0 ? 'color:#90ee90;font-weight:bold' : 'color:#ff4444;font-weight:bold';
+    console.log(status, style);
+  })();
 
   if (gBrowser) {
     detector.init();
