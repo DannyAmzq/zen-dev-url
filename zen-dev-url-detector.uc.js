@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260412-14';
+  const ZEN_DEV_URL_VERSION = '20260412-15';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -232,21 +232,24 @@
       });
 
       // Clear site data (cookies + localStorage + cache) for the current origin.
-      // getBaseDomain() throws for localhost and IP addresses, so fall back to
-      // the raw host — deleteDataFromBaseDomain still accepts those fine.
+      // getBaseDomain() throws for localhost/IPs, so fall back to uri.host.
+      // deleteDataFromBaseDomain was added in a later Firefox version than some
+      // Zen builds ship; fall back to deleteDataFromHost which is always present.
       const clearSiteData = makeBtn('zen-dev-url-clear-data', 'Clear site data', async () => {
         try {
           const uri = gBrowser.currentURI;
-          let baseDomain;
-          try { baseDomain = Services.eTLD.getBaseDomain(uri); }
-          catch { baseDomain = uri.host; }
-          await Services.clearData.deleteDataFromBaseDomain(
-            baseDomain,
-            /* userRequest */ false,
+          let host;
+          try { host = Services.eTLD.getBaseDomain(uri); }
+          catch { host = uri.host; }
+          const flags =
             Ci.nsIClearDataService.CLEAR_COOKIES |
             Ci.nsIClearDataService.CLEAR_DOM_STORAGES |
-            Ci.nsIClearDataService.CLEAR_CACHE
-          );
+            Ci.nsIClearDataService.CLEAR_CACHE;
+          if (typeof Services.clearData.deleteDataFromBaseDomain === 'function') {
+            await Services.clearData.deleteDataFromBaseDomain(host, false, flags);
+          } else {
+            await Services.clearData.deleteDataFromHost(host, false, flags);
+          }
           clearSiteData.setAttribute('data-done', '');
           setTimeout(() => clearSiteData.removeAttribute('data-done'), 1500);
         } catch (e) {
@@ -280,11 +283,12 @@
       const viewportEl = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
       viewportEl.id = 'zen-dev-url-viewport';
 
-      // Layout: [field] [copy] | sep | [clear-data] [reload] [inspector] [console] [network] | sep | [viewport] | sep | [gear]
+      // Layout: [field] [copy] | sep | [clear-data] | sep | [reload] [inspector] [console] [network] | sep | [viewport] | sep | [gear]
       banner.appendChild(field);
       banner.appendChild(copyBtn);
       banner.appendChild(makeSeparator());
       banner.appendChild(clearSiteData);
+      banner.appendChild(makeSeparator());
       for (const btn of devButtons) {
         banner.appendChild(btn);
       }
