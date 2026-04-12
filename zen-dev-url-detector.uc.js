@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260412-12';
+  const ZEN_DEV_URL_VERSION = '20260412-13';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -66,6 +66,8 @@
       Services.prefs.addObserver('zen.urlbar.dev-indicator.include-zero-host', this);
       Services.prefs.addObserver('zen.urlbar.dev-indicator.include-local-tlds', this);
       Services.prefs.addObserver('zen.urlbar.dev-indicator.include-file-urls', this);
+      Services.prefs.addObserver('zen.urlbar.dev-indicator.custom-ports', this);
+      Services.prefs.addObserver('zen.urlbar.dev-indicator.custom-patterns', this);
       // Alt+Shift+D toggles dev mode for the current tab.
       // Works on any URL — forced-on overrides URL checks, forced-off suppresses
       // the banner even on dev URLs. mozSystemGroup: true fires before web content.
@@ -233,6 +235,30 @@
       const screenshotBtn = makeBtn('zen-dev-url-screenshot', 'Take screenshot',
         () => toggleScreenshot());
 
+      // Clear site data (cookies + localStorage + cache) for the current origin
+      const clearSiteData = makeBtn('zen-dev-url-clear-data', 'Clear site data', async () => {
+        try {
+          const uri = gBrowser.currentURI;
+          const baseDomain = Services.eTLD.getBaseDomain(uri);
+          await Services.clearData.deleteDataFromBaseDomain(
+            baseDomain,
+            /* userRequest */ false,
+            Ci.nsIClearDataService.CLEAR_COOKIES |
+            Ci.nsIClearDataService.CLEAR_DOM_STORAGES |
+            Ci.nsIClearDataService.CLEAR_CACHE
+          );
+          clearSiteData.setAttribute('data-done', '');
+          setTimeout(() => clearSiteData.removeAttribute('data-done'), 1500);
+        } catch (e) {
+          console.error('[zen-dev-url] clear site data failed:', e);
+        }
+      });
+
+      // Open current URL in a new private window
+      const privateBtn = makeBtn('zen-dev-url-private', 'Open in private window', () => {
+        OpenBrowserWindow({ private: true, url: gBrowser.currentURI.spec });
+      });
+
       // DevTools group: reload, inspector, console, network
       const devButtons = [
         makeBtn('zen-dev-url-clear-refresh', 'Clear cache and reload',
@@ -255,15 +281,23 @@
         makeBtn('zen-dev-url-network', 'Open network panel', () => togglePanel('netmonitor')),
       ];
 
-      // Layout: [field] [copy] | sep | [screenshot] | sep | [reload] [inspector] [console] [network] | sep | [gear]
+      // Viewport size readout — updated on resize and tab/navigation changes
+      const viewportEl = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+      viewportEl.id = 'zen-dev-url-viewport';
+
+      // Layout: [field] [copy] | sep | [screenshot] [private] | sep | [clear-data] [reload] [inspector] [console] [network] | sep | [viewport] | sep | [gear]
       banner.appendChild(field);
       banner.appendChild(copyBtn);
       banner.appendChild(makeSeparator());
       banner.appendChild(screenshotBtn);
+      banner.appendChild(privateBtn);
       banner.appendChild(makeSeparator());
+      banner.appendChild(clearSiteData);
       for (const btn of devButtons) {
         banner.appendChild(btn);
       }
+      banner.appendChild(makeSeparator());
+      banner.appendChild(viewportEl);
       banner.appendChild(makeSeparator());
       const settingsBtn = makeBtn('zen-dev-url-settings', 'Settings', () => detector._openSettings());
       banner.appendChild(settingsBtn);
@@ -271,11 +305,15 @@
       document.documentElement.appendChild(banner);
       this._banner = banner;
       this._field = field;
+      this._viewportEl = viewportEl;
       this._showDisplay = showDisplay;
       this._repositionBanner();
       this._createSettingsPanel();
-      // Re-align banner if window is resized or sidebar width changes
-      window.addEventListener('resize', () => this._repositionBanner());
+      // Re-align banner and refresh viewport on window resize or sidebar width changes
+      window.addEventListener('resize', () => {
+        this._repositionBanner();
+        this._updateViewport();
+      });
     },
 
     /**
@@ -290,6 +328,15 @@
       this._banner.style.top = rect.top + 'px';
       this._banner.style.left = rect.left + 'px';
       this._banner.style.width = rect.width + 'px';
+    },
+
+    /**
+     * Updates the viewport size readout (WxH of the selected browser's content area).
+     */
+    _updateViewport() {
+      if (!this._viewportEl) return;
+      const br = gBrowser.selectedBrowser?.getBoundingClientRect();
+      if (br) this._viewportEl.textContent = `${Math.round(br.width)} × ${Math.round(br.height)}`;
     },
 
     /** Called when the zen.urlbar.show-dev-indicator pref changes */
@@ -319,6 +366,23 @@
         if (Services.prefs.getBoolPref('zen.urlbar.dev-indicator.include-local-tlds', true) &&
             this._devTLDs.some(tld => host.endsWith(tld)))
           return true;
+        // Custom ports — any host on a listed port is treated as dev
+        const customPorts = Services.prefs.getStringPref('zen.urlbar.dev-indicator.custom-ports', '');
+        if (customPorts && uri.port > 0) {
+          const ports = customPorts.split(',').map(p => p.trim()).filter(Boolean);
+          if (ports.includes(String(uri.port))) return true;
+        }
+        // Custom host patterns — simple glob (* = any chars, ? = one char)
+        const customPatterns = Services.prefs.getStringPref('zen.urlbar.dev-indicator.custom-patterns', '');
+        if (customPatterns) {
+          const patterns = customPatterns.split(',').map(p => p.trim()).filter(Boolean);
+          for (const pat of patterns) {
+            const re = new RegExp(
+              '^' + pat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$'
+            );
+            if (re.test(host)) return true;
+          }
+        }
         return false;
       } catch { return false; }
     },
@@ -338,6 +402,18 @@
       if (isDev && currentUri) {
         if (this._field && this._field.getAttribute('contenteditable') === 'false') {
           this._showDisplay(currentUri.spec);
+        }
+        this._updateViewport();
+        // Auto-open DevTools panel if setting is on and panel not already open
+        if (Services.prefs.getBoolPref('zen.urlbar.dev-indicator.auto-open-devtools', false)) {
+          try {
+            const { DevToolsShim } = ChromeUtils.importESModule('chrome://devtools-startup/content/DevToolsShim.sys.mjs');
+            const toolbox = DevToolsShim.getToolboxForTab(gBrowser.selectedTab);
+            if (!toolbox || toolbox._destroyer) {
+              const toolId = Services.prefs.getStringPref('zen.urlbar.dev-indicator.auto-open-panel', 'webconsole');
+              DevToolsShim.showToolboxForTab(gBrowser.selectedTab, { toolId });
+            }
+          } catch { /* DevTools unavailable */ }
         }
       }
     },
@@ -385,9 +461,11 @@
      * @param {string} labelText - Human-readable label
      * @param {string} prefKey - about:config preference key
      * @param {boolean} defaultVal - Default value if pref is unset
+     * @param {boolean} [invert=false] - If true, display is opposite of pref value
+     *   (e.g. pref "block_x=true" shown as toggle "Allow x=false")
      * @returns {HTMLElement}
      */
-    _makeToggleRow(labelText, prefKey, defaultVal) {
+    _makeToggleRow(labelText, prefKey, defaultVal, invert = false) {
       const row = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
       row.className = 'zen-dev-url-toggle-row';
 
@@ -400,9 +478,11 @@
       const input = document.createElementNS('http://www.w3.org/1999/xhtml', 'input');
       input.type = 'checkbox';
       input.dataset.pref = prefKey;
-      input.checked = Services.prefs.getBoolPref(prefKey, defaultVal);
+      input.dataset.invert = invert ? '1' : '';
+      const raw = Services.prefs.getBoolPref(prefKey, defaultVal);
+      input.checked = invert ? !raw : raw;
       input.addEventListener('change', () => {
-        Services.prefs.setBoolPref(prefKey, input.checked);
+        Services.prefs.setBoolPref(prefKey, invert ? !input.checked : input.checked);
         detector._update();
       });
 
@@ -417,12 +497,112 @@
     },
 
     /**
+     * Creates a select (dropdown) row for the settings panel.
+     * @param {string} labelText
+     * @param {string} prefKey
+     * @param {{value:string, label:string}[]} options
+     * @param {string} defaultVal
+     * @returns {HTMLElement}
+     */
+    _makeSelectRow(labelText, prefKey, options, defaultVal) {
+      const row = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+      row.className = 'zen-dev-url-toggle-row';
+
+      const label = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+      label.textContent = labelText;
+
+      const select = document.createElementNS('http://www.w3.org/1999/xhtml', 'select');
+      select.className = 'zen-dev-url-select';
+      select.dataset.pref = prefKey;
+      const current = Services.prefs.getStringPref(prefKey, defaultVal);
+      for (const opt of options) {
+        const el = document.createElementNS('http://www.w3.org/1999/xhtml', 'option');
+        el.value = opt.value;
+        el.textContent = opt.label;
+        if (opt.value === current) el.selected = true;
+        select.appendChild(el);
+      }
+      select.addEventListener('change', () => {
+        Services.prefs.setStringPref(prefKey, select.value);
+      });
+      select.addEventListener('mousedown', e => e.stopPropagation());
+
+      row.appendChild(label);
+      row.appendChild(select);
+      return row;
+    },
+
+    /**
+     * Creates a section header label for the settings panel.
+     * @param {string} text
+     * @returns {HTMLElement}
+     */
+    _makeSectionHeader(text) {
+      const el = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+      el.className = 'zen-dev-url-section-header';
+      el.textContent = text;
+      return el;
+    },
+
+    /**
+     * Creates a thin horizontal divider for the settings panel.
+     * @returns {HTMLElement}
+     */
+    _makePanelDivider() {
+      const el = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+      el.className = 'zen-dev-url-panel-divider';
+      return el;
+    },
+
+    /**
+     * Creates a text input row for the settings panel (string prefs).
+     * Changes are debounced 400ms then written to prefs and trigger _update().
+     * @param {string} labelText - Human-readable label
+     * @param {string} prefKey - about:config preference key
+     * @param {string} placeholder - Placeholder text
+     * @returns {HTMLElement}
+     */
+    _makeTextRow(labelText, prefKey, placeholder) {
+      const row = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+      row.className = 'zen-dev-url-text-row';
+
+      const label = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+      label.textContent = labelText;
+
+      const input = document.createElementNS('http://www.w3.org/1999/xhtml', 'input');
+      input.type = 'text';
+      input.className = 'zen-dev-url-text-input';
+      input.dataset.pref = prefKey;
+      input.placeholder = placeholder;
+      input.value = Services.prefs.getStringPref(prefKey, '');
+
+      let debounce;
+      input.addEventListener('input', () => {
+        clearTimeout(debounce);
+        debounce = setTimeout(() => {
+          Services.prefs.setStringPref(prefKey, input.value);
+          detector._update();
+        }, 400);
+      });
+      // Prevent the field from triggering banner edit on click
+      input.addEventListener('mousedown', e => e.stopPropagation());
+
+      row.appendChild(label);
+      row.appendChild(input);
+      return row;
+    },
+
+    /**
      * Creates and appends the floating settings panel to the document root.
      * The panel is hidden by default and shown by _openSettings().
+     * Sections: Detection | Network
      */
     _createSettingsPanel() {
       const panel = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
       panel.id = 'zen-dev-url-settings-panel';
+
+      // ── Detection ─────────────────────────────────────────────
+      panel.appendChild(this._makeSectionHeader('Detection'));
       panel.appendChild(this._makeToggleRow(
         'Show for 0.0.0.0',
         'zen.urlbar.dev-indicator.include-zero-host',
@@ -438,6 +618,60 @@
         'zen.urlbar.dev-indicator.include-file-urls',
         false
       ));
+      panel.appendChild(this._makeTextRow(
+        'Custom ports',
+        'zen.urlbar.dev-indicator.custom-ports',
+        '3000, 5173, 8080, 8000'
+      ));
+      panel.appendChild(this._makeTextRow(
+        'Custom host patterns',
+        'zen.urlbar.dev-indicator.custom-patterns',
+        '*.vercel.app, *.ngrok.io, *.loca.lt'
+      ));
+
+      // ── Network ───────────────────────────────────────────────
+      panel.appendChild(this._makePanelDivider());
+      panel.appendChild(this._makeSectionHeader('Network'));
+      panel.appendChild(this._makeToggleRow(
+        'Disable HTTP cache',
+        'devtools.cache.disabled',
+        false
+      ));
+      panel.appendChild(this._makeToggleRow(
+        'Allow mixed content (HTTP on HTTPS)',
+        'security.mixed_content.block_active_content',
+        true,
+        /* invert */ true
+      ));
+
+      // ── JavaScript ────────────────────────────────────────────
+      panel.appendChild(this._makePanelDivider());
+      panel.appendChild(this._makeSectionHeader('Page'));
+      panel.appendChild(this._makeToggleRow(
+        'Enable JavaScript',
+        'javascript.enabled',
+        true
+      ));
+
+      // ── DevTools ──────────────────────────────────────────────
+      panel.appendChild(this._makePanelDivider());
+      panel.appendChild(this._makeSectionHeader('DevTools'));
+      panel.appendChild(this._makeToggleRow(
+        'Auto-open DevTools on dev URLs',
+        'zen.urlbar.dev-indicator.auto-open-devtools',
+        false
+      ));
+      panel.appendChild(this._makeSelectRow(
+        'Panel',
+        'zen.urlbar.dev-indicator.auto-open-panel',
+        [
+          { value: 'webconsole',  label: 'Console'   },
+          { value: 'netmonitor',  label: 'Network'   },
+          { value: 'inspector',   label: 'Inspector' },
+        ],
+        'webconsole'
+      ));
+
       document.documentElement.appendChild(panel);
       this._settingsPanel = panel;
     },
@@ -463,9 +697,17 @@
         this._closeSettings();
         return;
       }
-      // Refresh checkbox states from live prefs
-      this._settingsPanel.querySelectorAll('input[data-pref]').forEach(input => {
-        input.checked = Services.prefs.getBoolPref(input.dataset.pref, true);
+      // Refresh all input/select states from live prefs
+      this._settingsPanel.querySelectorAll('input[data-pref], select[data-pref]').forEach(el => {
+        const key = el.dataset.pref;
+        if (el.tagName === 'SELECT') {
+          el.value = Services.prefs.getStringPref(key, '');
+        } else if (el.type === 'checkbox') {
+          const raw = Services.prefs.getBoolPref(key, true);
+          el.checked = el.dataset.invert ? !raw : raw;
+        } else if (el.type === 'text') {
+          el.value = Services.prefs.getStringPref(key, '');
+        }
       });
       this._repositionPanel();
       this._settingsPanel.style.display = 'block';

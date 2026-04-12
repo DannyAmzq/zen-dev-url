@@ -349,3 +349,108 @@
 #zen-dev-url-toast[data-visible] {
     opacity: 1;
 }
+
+/* Viewport size readout in banner */
+#zen-dev-url-viewport {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-family: monospace;
+    color: rgba(255, 255, 255, 0.45);
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+    margin: 0 2px;
+}
+
+/* Settings panel section headers */
+.zen-dev-url-section-header {
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 107, 53, 0.8);
+    padding: 8px 14px 3px;
+    user-select: none;
+}
+
+/* Thin divider between settings sections */
+.zen-dev-url-panel-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 6px 0;
+}
+
+/* Text input rows for custom ports / patterns */
+.zen-dev-url-text-row {
+    display: flex;
+    flex-direction: column;
+    padding: 3px 14px 8px;
+    gap: 5px;
+}
+
+.zen-dev-url-text-row > span {
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 11px;
+    user-select: none;
+}
+
+.zen-dev-url-text-input {
+    appearance: none !important;
+    -moz-appearance: none !important;
+    background: rgba(0, 0, 0, 0.4) !important;
+    background-image: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.22) !important;
+    border-radius: 3px;
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-family: monospace !important;
+    font-size: 11px !important;
+    padding: 3px 7px;
+    outline: none !important;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.12s ease;
+}
+
+.zen-dev-url-text-input:focus {
+    border-color: rgba(255, 107, 53, 0.75) !important;
+}
+
+.zen-dev-url-text-input::placeholder {
+    color: rgba(255, 255, 255, 0.28);
+    opacity: 1;
+}
+
+/* Clear site data button — shows a check on success */
+#zen-dev-url-clear-data::before {
+    mask-image: url('chrome://global/skin/icons/delete.svg');
+}
+
+#zen-dev-url-clear-data[data-done]::before {
+    mask-image: url('chrome://global/skin/icons/check.svg');
+    background-color: #90ee90;
+}
+
+/* Open in private window button */
+#zen-dev-url-private::before {
+    mask-image: url('chrome://browser/skin/privateBrowsing.svg');
+}
+
+/* DevTools panel select dropdown in settings */
+.zen-dev-url-select {
+    appearance: none !important;
+    -moz-appearance: none !important;
+    background: rgba(0, 0, 0, 0.4) !important;
+    background-image: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.22) !important;
+    border-radius: 3px;
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-family: monospace !important;
+    font-size: 11px !important;
+    padding: 2px 6px;
+    cursor: pointer;
+    outline: none !important;
+}
+
+.zen-dev-url-select:focus {
+    border-color: rgba(255, 107, 53, 0.75) !important;
+}
