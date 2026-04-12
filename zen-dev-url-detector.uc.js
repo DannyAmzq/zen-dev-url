@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260412-19';
+  const ZEN_DEV_URL_VERSION = '20260412-20';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -247,12 +247,20 @@
             Ci.nsIClearDataService.CLEAR_DOM_STORAGES |
             Ci.nsIClearDataService.CLEAR_CACHE;
           const onDone = () => {
+            console.log('[zen-dev-url] clear site data: onDataDeleted fired ✓');
             clearSiteData.setAttribute('data-done', '');
             setTimeout(() => clearSiteData.removeAttribute('data-done'), 1500);
           };
-          const cb = { onDataDeleted() { onDone(); } };
-          const fn = (Services.clearData.deleteDataFromBaseDomain ?? Services.clearData.deleteDataFromHost)
-            .bind(Services.clearData);
+          const cb = { onDataDeleted(resultFlags) {
+            console.log('[zen-dev-url] clear site data: resultFlags =', resultFlags);
+            onDone();
+          } };
+          const hasBaseDomain = typeof Services.clearData.deleteDataFromBaseDomain === 'function';
+          const fn = (hasBaseDomain
+            ? Services.clearData.deleteDataFromBaseDomain
+            : Services.clearData.deleteDataFromHost
+          ).bind(Services.clearData);
+          console.log(`[zen-dev-url] clear site data: host="${host}" method=${hasBaseDomain ? 'deleteDataFromBaseDomain' : 'deleteDataFromHost'}`);
           fn(host, false, flags, cb);
         } catch (e) {
           console.error('[zen-dev-url] clear site data failed:', e);
@@ -872,6 +880,13 @@
     assert('exact host does not match other',       globMatch('myapp.local',  'other.local'),             false);
     assert('? matches single char',                 globMatch('app-?.local',  'app-1.local'),             true);
     assert('? does not match two chars',            globMatch('app-?.local',  'app-12.local'),            false);
+
+    // nsIClearDataService API introspection (not a pass/fail test, just info)
+    console.log('[zen-dev-url] clearData API:',
+      'deleteDataFromBaseDomain:', typeof Services.clearData.deleteDataFromBaseDomain,
+      'deleteDataFromHost:', typeof Services.clearData.deleteDataFromHost,
+      'deleteDataFromPrincipal:', typeof Services.clearData.deleteDataFromPrincipal
+    );
 
     // Custom port matching
     function portMatch(customPorts, port) {
