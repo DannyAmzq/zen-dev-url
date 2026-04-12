@@ -3,6 +3,11 @@
    Add the contents of this file to your userChrome.css
    ============================================================ */
 
+/* Sidebar tab labels — increase from default ~11px to 13px */
+.tab-label {
+    font-size: 13px !important;
+}
+
 /* Sidebar URL bar gets an orange outline on dev URLs */
 :root[zen-dev-url] #urlbar .urlbar-background {
     outline: 1.5px solid #ff6b35 !important;
