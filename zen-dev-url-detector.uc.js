@@ -81,44 +81,64 @@
       badge.id = 'zen-dev-url-badge';
       badge.textContent = 'DEV';
 
-      // Wrapper is the flex item. The input is always in the layout (no shift).
-      // An overlay span sits on top in display mode to show styled protocol/host text.
-      const urlWrapper = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
-      urlWrapper.id = 'zen-dev-url-field';
+      // Single contenteditable div — always the same element so text never
+      // shifts position. Shows styled protocol/host HTML in display mode;
+      // switches to plain editable text on mousedown.
+      const field = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+      field.id = 'zen-dev-url-field';
+      field.setAttribute('contenteditable', 'false');
+      field.spellcheck = false;
 
-      const input = document.createElementNS('http://www.w3.org/1999/xhtml', 'input');
-      input.id = 'zen-dev-url-banner-input';
-      input.type = 'text';
-      input.spellcheck = false;
-      input.addEventListener('keydown', (e) => {
+      const showDisplay = (spec) => {
+        field.setAttribute('contenteditable', 'false');
+        const match = spec.match(/^((?:https?|file):\/\/\/?)(.*)/);
+        field.innerHTML = '';
+        if (match) {
+          const proto = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+          proto.className = 'zen-dev-url-protocol';
+          proto.textContent = match[1];
+          const host = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+          host.className = 'zen-dev-url-host';
+          host.textContent = match[2];
+          field.appendChild(proto);
+          field.appendChild(host);
+        } else {
+          field.textContent = spec;
+        }
+      };
+
+      // Switch to plain text on mousedown so the browser positions the cursor
+      // at the exact click point within the now-plain content.
+      field.addEventListener('mousedown', () => {
+        if (field.getAttribute('contenteditable') === 'false') {
+          field.textContent = gBrowser.currentURI.spec;
+          field.setAttribute('contenteditable', 'true');
+        }
+      });
+      field.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
-          const val = input.value.trim();
+          e.preventDefault();
+          const val = field.textContent.trim();
           if (val) {
             gURLBar.value = val;
             gURLBar.handleCommand();
           }
-          input.blur();
+          field.blur();
         } else if (e.key === 'Escape') {
-          input.value = gBrowser.currentURI.spec;
-          input.blur();
+          showDisplay(gBrowser.currentURI.spec);
+          field.blur();
         }
       });
-      input.addEventListener('dblclick', () => input.select());
-      input.addEventListener('blur', () => {
-        overlay.style.display = '';
+      field.addEventListener('dblclick', () => {
+        const range = document.createRange();
+        range.selectNodeContents(field);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
       });
-
-      // Overlay — absolutely positioned on top of the input. Shows styled
-      // protocol/host text. Hidden when the input is being edited.
-      const overlay = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
-      overlay.id = 'zen-dev-url-display';
-      overlay.addEventListener('click', () => {
-        overlay.style.display = 'none';
-        input.focus();
+      field.addEventListener('blur', () => {
+        showDisplay(gBrowser.currentURI.spec);
       });
-
-      urlWrapper.appendChild(input);
-      urlWrapper.appendChild(overlay);
 
       /**
        * Lazily loads DevToolsShim so DevTools panels can be opened/closed
@@ -216,7 +236,7 @@
 
       // Layout: [badge] [field] [copy] | sep | [screenshot] | sep | [reload] [inspector] [console] [network]
       banner.appendChild(badge);
-      banner.appendChild(urlWrapper);
+      banner.appendChild(field);
       banner.appendChild(copyBtn);
       banner.appendChild(makeSeparator());
       banner.appendChild(screenshotBtn);
@@ -227,8 +247,8 @@
 
       document.documentElement.appendChild(banner);
       this._banner = banner;
-      this._input = input;
-      this._overlay = overlay;
+      this._field = field;
+      this._showDisplay = showDisplay;
       this._repositionBanner();
       // Re-align banner if window is resized or sidebar width changes
       window.addEventListener('resize', () => this._repositionBanner());
@@ -282,17 +302,8 @@
       const isDev = this._enabled && this._isDevUri(currentUri);
       document.documentElement.toggleAttribute('zen-dev-url', isDev);
       if (isDev && currentUri) {
-        const spec = currentUri.spec;
-        if (this._input) this._input.value = spec;
-        if (this._overlay) {
-          const match = spec.match(/^((?:https?|file):\/\/\/?)(.*)/);
-          if (match) {
-            this._overlay.innerHTML =
-              `<span class="zen-dev-url-protocol">${match[1]}</span>` +
-              `<span class="zen-dev-url-host">${match[2]}</span>`;
-          } else {
-            this._overlay.textContent = spec;
-          }
+        if (this._field && this._field.getAttribute('contenteditable') === 'false') {
+          this._showDisplay(currentUri.spec);
         }
       }
     },
