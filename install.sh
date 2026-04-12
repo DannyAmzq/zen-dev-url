@@ -49,28 +49,28 @@ find_default_profile() {
   # Parse the profile marked Default=1
   local rel_path
   rel_path=$(awk '
-    /^\[Profile/ { in_profile=1; path=""; is_default=0; is_relative=1 }
+    /^\[Profile/ { in_profile=1; path=""; is_default=0 }
     in_profile && /^Path=/ { path=substr($0,6) }
     in_profile && /^Default=1/ { is_default=1 }
-    in_profile && /^IsRelative=0/ { is_relative=0 }
     in_profile && /^$/ {
-      if (is_default && path != "") {
-        print (is_relative ? "Profiles/" : "") path
-        exit
-      }
+      if (is_default && path != "") { print path; exit }
       in_profile=0
     }
     END {
-      if (is_default && path != "") print (is_relative ? "Profiles/" : "") path
+      if (is_default && path != "") print path
     }
   ' "$ini")
 
   [[ -z "$rel_path" ]] && error "Could not determine default profile from profiles.ini."
 
-  # profiles.ini paths are relative to the parent of the Profiles dir
+  # Path= is relative to the directory containing profiles.ini, or absolute
   local base_dir
-  base_dir=$(dirname "$profiles_dir")
-  echo "$base_dir/$rel_path"
+  base_dir=$(dirname "$ini")
+  if [[ "$rel_path" = /* ]]; then
+    echo "$rel_path"
+  else
+    echo "$base_dir/$rel_path"
+  fi
 }
 
 PROFILE_DIR=$(find_default_profile "$PROFILES_INI" "$ZEN_PROFILES_DIR")
