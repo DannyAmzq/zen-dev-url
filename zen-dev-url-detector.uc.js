@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260412-7';
+  const ZEN_DEV_URL_VERSION = '20260412-8';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -80,11 +80,11 @@
           if (currentlyShowing) {
             this._forcedBrowsers.delete(browser);
             this._excludedBrowsers.add(browser);
-            this._showToast('Dev mode off');
+            this._showToast('Dev banner hidden for this tab');
           } else {
             this._excludedBrowsers.delete(browser);
             this._forcedBrowsers.add(browser);
-            this._showToast('Dev mode on');
+            this._showToast('Dev banner enabled for this tab');
           }
           this._update();
         }

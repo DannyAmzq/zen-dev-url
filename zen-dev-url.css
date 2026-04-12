@@ -251,7 +251,7 @@
     position: fixed;
     z-index: 10000;
     min-width: 260px;
-    background: color-mix(in srgb, #ff6b35 18%, var(--toolbar-bgcolor));
+    background: color-mix(in srgb, #ff6b35 15%, Canvas);
     border: 1.5px solid #ff6b35;
     border-radius: 6px;
     padding: 8px 0;
