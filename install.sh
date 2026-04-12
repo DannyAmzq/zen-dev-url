@@ -25,13 +25,21 @@ error()   { echo -e "${RED}[zen-dev-url]${NC} $1"; exit 1; }
 if [[ "$OSTYPE" == "darwin"* ]]; then
   ZEN_APP="/Applications/Zen.app"
   ZEN_RESOURCES="$ZEN_APP/Contents/Resources"
-  ZEN_PROFILES_DIR="$HOME/Library/Application Support/Zen/Profiles"
   PROFILES_INI="$HOME/Library/Application Support/Zen/profiles.ini"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-  _zen_bin=$(find /opt /usr/lib /usr/local/lib -name "zen" -type f 2>/dev/null | head -1)
-  [[ -z "$_zen_bin" ]] && error "Could not find Zen installation. Is Zen Browser installed?"
-  ZEN_RESOURCES=$(dirname "$_zen_bin")
-  ZEN_PROFILES_DIR="$HOME/.zen/Profiles"
+  # Check common install locations: native package, Flatpak, tarball
+  if   [[ -f "$HOME/.local/share/zen-browser/zen" ]]; then
+    ZEN_RESOURCES="$HOME/.local/share/zen-browser"
+  elif [[ -f "/opt/zen-browser/zen" ]]; then
+    ZEN_RESOURCES="/opt/zen-browser"
+  elif [[ -f "/usr/lib/zen/zen" ]]; then
+    ZEN_RESOURCES="/usr/lib/zen"
+  else
+    # Flatpak: resources live inside the app bundle, userscript goes in profile only
+    _zen_bin=$(find /opt /usr/lib /usr/local/lib "$HOME/.local" -name "zen" -type f 2>/dev/null | head -1)
+    [[ -z "$_zen_bin" ]] && error "Could not find Zen installation. Is Zen Browser installed?"
+    ZEN_RESOURCES=$(dirname "$_zen_bin")
+  fi
   PROFILES_INI="$HOME/.zen/profiles.ini"
 else
   error "Unsupported OS: $OSTYPE. Use install.ps1 on Windows."

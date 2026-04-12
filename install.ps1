@@ -33,27 +33,39 @@ $ProfilesIni = "$env:APPDATA\zen\profiles.ini"
 if (-not (Test-Path $ProfilesIni)) { Fail "profiles.ini not found at: $ProfilesIni" }
 
 $iniContent = Get-Content $ProfilesIni
-$currentPath = $null
-$currentIsRelative = $true
-$currentIsDefault = $false
 $profilePath = $null
+$isRelative  = $true
 
+# Preferred: [Install{hash}] section — tracks the profile Zen actually launched last
+$inInstall = $false
 foreach ($line in $iniContent) {
-  if ($line -match '^\[Profile') {
-    if ($currentIsDefault -and $currentPath) {
-      $profilePath = $currentPath
-      break
-    }
-    $currentPath = $null; $currentIsRelative = $true; $currentIsDefault = $false
+  if     ($line -match '^\[Install')       { $inInstall = $true }
+  elseif ($line -match '^\[')              { $inInstall = $false }
+  elseif ($inInstall -and $line -match '^Default=(.+)') {
+    $profilePath = $Matches[1].Trim()
+    $isRelative  = $true   # [Install] Default= paths are always relative
+    break
   }
-  elseif ($line -match '^Path=(.+)')    { $currentPath = $Matches[1] }
-  elseif ($line -match '^IsRelative=0') { $currentIsRelative = $false }
-  elseif ($line -match '^Default=1')    { $currentIsDefault = $true }
 }
-if (-not $profilePath -and $currentIsDefault -and $currentPath) { $profilePath = $currentPath }
+
+# Fallback: profile section marked Default=1
+if (-not $profilePath) {
+  $curPath = $null; $curRelative = $true; $curDefault = $false
+  foreach ($line in $iniContent) {
+    if ($line -match '^\[Profile') {
+      if ($curDefault -and $curPath) { $profilePath = $curPath; $isRelative = $curRelative; break }
+      $curPath = $null; $curRelative = $true; $curDefault = $false
+    }
+    elseif ($line -match '^Path=(.+)')    { $curPath = $Matches[1] }
+    elseif ($line -match '^IsRelative=0') { $curRelative = $false }
+    elseif ($line -match '^Default=1')    { $curDefault = $true }
+  }
+  if (-not $profilePath -and $curDefault -and $curPath) { $profilePath = $curPath; $isRelative = $curRelative }
+}
+
 if (-not $profilePath) { Fail "Could not find default profile in profiles.ini." }
 
-$ProfileDir = if ($currentIsRelative) {
+$ProfileDir = if ($isRelative) {
   Join-Path "$env:APPDATA\zen" $profilePath
 } else { $profilePath }
 

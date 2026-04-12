@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260412-23';
+  const ZEN_DEV_URL_VERSION = '20260412-24';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -249,7 +249,6 @@
             ?? ((ciCD.CLEAR_CACHE ?? ciCD.CLEAR_NETWORK_CACHE ?? 0) | (ciCD.CLEAR_IMAGE_CACHE ?? 0) | (ciCD.CLEAR_JS_CACHE ?? 0) | (ciCD.CLEAR_CSS_CACHE ?? 0));
           const flags = (ciCD.CLEAR_COOKIES ?? 0) | (ciCD.CLEAR_DOM_STORAGES ?? 0) | cacheFlags;
           const cb = { onDataDeleted(resultFlags) {
-            console.log(`[zen-dev-url] clear site data: done (resultFlags=${resultFlags}) — hard reloading`);
             clearSiteData.setAttribute('data-done', '');
             setTimeout(() => clearSiteData.removeAttribute('data-done'), 1500);
             // Hard reload AFTER confirmed deletion so we know the page fetches fresh
@@ -260,7 +259,6 @@
             ? Services.clearData.deleteDataFromBaseDomain
             : Services.clearData.deleteDataFromHost
           ).bind(Services.clearData);
-          console.log(`[zen-dev-url] clear site data: host="${host}" flags=${flags} method=${hasBaseDomain ? 'deleteDataFromBaseDomain' : 'deleteDataFromHost'}`);
           fn(host, false, flags, cb);
         } catch (e) {
           console.error('[zen-dev-url] clear site data failed:', e);
@@ -719,34 +717,24 @@
       panel.appendChild(this._makeSectionHeader('Actions'));
       panel.appendChild(this._makeActionRow('Open in private window', () => {
         const url = gBrowser.currentURI.spec;
-        console.log('[zen-dev-url] opening private window for:', url);
         const win = OpenBrowserWindow({ private: true });
         win.addEventListener('load', () => {
-          console.log('[zen-dev-url] private win load fired.',
-            'gBrowser:', !!win.gBrowser,
-            'gURLBar:', !!win.gURLBar,
-            'selectedBrowser:', !!win.gBrowser?.selectedBrowser);
           // Defer one tick so all chrome init finishes before we navigate.
           // fixupAndLoadURIString lives on gBrowser (the tabbrowser), NOT on
-          // selectedBrowser (the <browser> element) — calling it there is a
-          // silent no-op, which is why it logged "ok" but never navigated.
+          // selectedBrowser (the <browser> element).
           win.setTimeout(() => {
             try {
               win.gBrowser.fixupAndLoadURIString(url, {
                 triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
               });
-              console.log('[zen-dev-url] private win: gBrowser.fixupAndLoadURIString ok');
-              return;
             } catch (e1) {
-              console.warn('[zen-dev-url] private win: fixupAndLoadURIString failed:', e1.message);
-            }
-            // Fallback: URLBar (always present, works in all Zen builds)
-            try {
-              win.gURLBar.value = url;
-              win.gURLBar.handleCommand();
-              console.log('[zen-dev-url] private win: URLBar handleCommand ok');
-            } catch (e2) {
-              console.error('[zen-dev-url] private win: all nav methods failed:', e2.message);
+              // Fallback: URLBar (always present, works in all Zen builds)
+              try {
+                win.gURLBar.value = url;
+                win.gURLBar.handleCommand();
+              } catch (e2) {
+                console.error('[zen-dev-url] private win: all nav methods failed:', e2.message);
+              }
             }
           }, 0);
         }, { once: true });
@@ -881,43 +869,19 @@
     assert('? matches single char',                 globMatch('app-?.local',  'app-1.local'),             true);
     assert('? does not match two chars',            globMatch('app-?.local',  'app-12.local'),            false);
 
-    // nsIClearDataService deep introspection
-    // Logs which methods exist, how many args they take, and whether the flag
-    // constants we use are defined — any undefined here would silently break clearing.
-    const cd = Services.clearData;
-    const hostFn = cd.deleteDataFromHost;
-    const baseFn = cd.deleteDataFromBaseDomain;
-    console.log('[zen-dev-url] clearData API:',
-      '\n  deleteDataFromBaseDomain:', typeof baseFn,
-      '\n  deleteDataFromHost:', typeof hostFn, '(expects', hostFn?.length, 'args)',
-      '\n  deleteDataFromPrincipal:', typeof cd.deleteDataFromPrincipal
-    );
+    // Verify the nsIClearDataService flag constants we depend on are defined
     const ciCD = Ci.nsIClearDataService;
-    // Dump every CLEAR_* constant this build exposes so we know what's available
-    const allClearConsts = Object.getOwnPropertyNames(ciCD ?? {})
-      .filter(k => k.startsWith('CLEAR_'))
-      .map(k => `${k}=${ciCD[k]}`)
-      .join(', ');
-    console.log('[zen-dev-url] clearData flags available:', allClearConsts || '(none)');
-    // Resolve cache flag with all known aliases
-    const cacheFlag = ciCD?.CLEAR_CACHE ?? ciCD?.CLEAR_NETWORK_CACHE ?? ciCD?.CLEAR_IMAGE_CACHE;
     const cookieFlag  = ciCD?.CLEAR_COOKIES;
     const storageFlag = ciCD?.CLEAR_DOM_STORAGES;
-    console.log('[zen-dev-url] clearData resolved flags:',
-      '\n  CLEAR_COOKIES:', cookieFlag,
-      '\n  CLEAR_DOM_STORAGES:', storageFlag,
-      '\n  cache (CLEAR_CACHE/NETWORK/IMAGE):', cacheFlag,
-      '\n  combined:', ((cookieFlag ?? 0) | (storageFlag ?? 0) | (cacheFlag ?? 0))
-    );
     if (cookieFlag === undefined || storageFlag === undefined) {
       fail++;
       console.error('[zen-dev-url] FAIL: CLEAR_COOKIES or CLEAR_DOM_STORAGES is undefined — clear site data broken');
     } else {
       pass++;
     }
+    const cacheFlag = ciCD?.CLEAR_ALL_CACHES ?? ciCD?.CLEAR_CACHE ?? ciCD?.CLEAR_NETWORK_CACHE;
     if (cacheFlag === undefined) {
-      // Not fatal — we'll clear cookies+storage but skip cache
-      console.warn('[zen-dev-url] WARN: no cache clear constant found (CLEAR_CACHE/NETWORK_CACHE/IMAGE_CACHE all undefined) — cache will not be cleared');
+      console.warn('[zen-dev-url] WARN: no cache clear constant found — cache will not be cleared on site data clear');
     }
 
     // Custom port matching
