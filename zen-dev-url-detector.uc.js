@@ -283,7 +283,6 @@
       if (!uri) return false;
       try {
         const { scheme } = uri;
-        if (scheme === 'file') return true;
         if (scheme !== 'http' && scheme !== 'https') return false;
         const host = uri.host ?? '';
         if (this._devHosts.has(host)) return true;
