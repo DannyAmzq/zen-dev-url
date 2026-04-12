@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260412-17';
+  const ZEN_DEV_URL_VERSION = '20260412-18';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -792,18 +792,19 @@
       this._settingsPanel.style.display = 'block';
 
       this._outsideClickHandler = (e) => {
-        // e.target can be an *anonymous* XUL node inside a native <select>
-        // (Firefox renders selects with internal chrome content). contains()
-        // only sees the regular DOM, so it misses anonymous nodes and returns
-        // false even though the click is inside the panel.
-        // composedPath() walks the full composed tree including anonymous/shadow
-        // content, giving us a reliable "is this click inside the panel?" check.
+        // Firefox renders native <select> option popups as XUL <menuitem>
+        // elements inside a <menupopup> overlay — a completely separate DOM
+        // tree that neither contains() nor composedPath() can reach from our
+        // panel. Ignore all menuitem mousedowns while the panel is open;
+        // our panel contains no menuitem elements so this is unambiguous.
+        if (e.target.nodeName?.toLowerCase() === 'menuitem') return;
+
+        // For all other targets, use composedPath() rather than contains() —
+        // the select element itself has anonymous XUL chrome content that
+        // contains() misses but composedPath() correctly includes.
         const gear = document.getElementById('zen-dev-url-settings');
         const panel = this._settingsPanel;
-        const path = e.composedPath();
-        const inside = path.some(el => el === panel || el === gear);
-        console.log(`[zen-dev-url] mousedown: target=${e.target.nodeName} inside=${inside}`);
-        if (inside) return;
+        if (e.composedPath().some(el => el === panel || el === gear)) return;
         this._closeSettings();
       };
       this._escapeHandler = (e) => {
