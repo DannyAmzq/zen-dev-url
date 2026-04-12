@@ -43,29 +43,27 @@ info "Zen resources: $ZEN_RESOURCES"
 
 find_default_profile() {
   local ini="$1"
-  local profiles_dir="$2"
   [[ -f "$ini" ]] || error "Could not find profiles.ini at: $ini"
 
-  # Parse the profile marked Default=1
-  local rel_path
-  rel_path=$(awk '
-    /^\[Profile/ { in_profile=1; path=""; is_default=0 }
-    in_profile && /^Path=/ { path=substr($0,6) }
-    in_profile && /^Default=1/ { is_default=1 }
-    in_profile && /^$/ {
-      if (is_default && path != "") { print path; exit }
-      in_profile=0
-    }
-    END {
-      if (is_default && path != "") print path
-    }
-  ' "$ini")
+  local base_dir rel_path
+  base_dir=$(dirname "$ini")
+
+  # Preferred: [Install{hash}] section — tracks the profile Zen actually launched last
+  rel_path=$(awk '/^\[Install/{in=1} in && /^Default=/{print substr($0,9); exit}' "$ini")
+
+  # Fallback: profile section marked Default=1
+  if [[ -z "$rel_path" ]]; then
+    rel_path=$(awk '
+      /^\[Profile/ { in_profile=1; path=""; is_default=0 }
+      in_profile && /^Path=/    { path=substr($0,6) }
+      in_profile && /^Default=1/{ is_default=1 }
+      in_profile && /^$/        { if (is_default && path!="") { print path; exit } in_profile=0 }
+      END                       { if (is_default && path!="") print path }
+    ' "$ini")
+  fi
 
   [[ -z "$rel_path" ]] && error "Could not determine default profile from profiles.ini."
 
-  # Path= is relative to the directory containing profiles.ini, or absolute
-  local base_dir
-  base_dir=$(dirname "$ini")
   if [[ "$rel_path" = /* ]]; then
     echo "$rel_path"
   else
@@ -73,7 +71,7 @@ find_default_profile() {
   fi
 }
 
-PROFILE_DIR=$(find_default_profile "$PROFILES_INI" "$ZEN_PROFILES_DIR")
+PROFILE_DIR=$(find_default_profile "$PROFILES_INI")
 [[ -d "$PROFILE_DIR" ]] || error "Profile directory not found: $PROFILE_DIR"
 success "Found profile: $PROFILE_DIR"
 
