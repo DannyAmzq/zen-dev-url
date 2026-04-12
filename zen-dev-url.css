@@ -154,12 +154,18 @@
 }
 
 .zen-dev-url-btn {
+    /* Firefox chrome applies -moz-appearance: button to HTML <button>s,
+       which on macOS renders a translucent native button and IGNORES
+       background-color. Force none so our dark fill actually paints. */
+    appearance: none !important;
+    -moz-appearance: none !important;
     flex-shrink: 0;
     margin-left: 4px;
     width: 26px;
     height: 22px;
     padding: 0;
-    background-color: rgba(0, 0, 0, 0.55);
+    background-color: rgba(0, 0, 0, 0.55) !important;
+    background-image: none !important;
     border: 1px solid rgba(255, 255, 255, 0.55);
     border-radius: 4px;
     cursor: pointer;
@@ -181,7 +187,8 @@
 }
 
 .zen-dev-url-btn:hover {
-    background-color: rgba(255, 107, 53, 0.7);
+    background-color: rgba(255, 107, 53, 0.7) !important;
+    background-image: none !important;
     border-color: rgba(255, 255, 255, 0.55);
 }
 
