@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260412-21';
+  const ZEN_DEV_URL_VERSION = '20260412-22';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -242,10 +242,10 @@
           let host;
           try { host = Services.eTLD.getBaseDomain(uri); }
           catch { host = uri.host; }
-          const flags =
-            Ci.nsIClearDataService.CLEAR_COOKIES |
-            Ci.nsIClearDataService.CLEAR_DOM_STORAGES |
-            Ci.nsIClearDataService.CLEAR_CACHE;
+          // CLEAR_CACHE was renamed in newer Firefox/Zen builds — try all known names
+          const ciCD = Ci.nsIClearDataService;
+          const cacheFlag = ciCD.CLEAR_CACHE ?? ciCD.CLEAR_NETWORK_CACHE ?? ciCD.CLEAR_IMAGE_CACHE ?? 0;
+          const flags = (ciCD.CLEAR_COOKIES ?? 0) | (ciCD.CLEAR_DOM_STORAGES ?? 0) | cacheFlag;
           const onDone = () => {
             console.log('[zen-dev-url] clear site data: onDataDeleted fired ✓');
             clearSiteData.setAttribute('data-done', '');
@@ -893,20 +893,31 @@
       '\n  deleteDataFromPrincipal:', typeof cd.deleteDataFromPrincipal
     );
     const ciCD = Ci.nsIClearDataService;
+    // Dump every CLEAR_* constant this build exposes so we know what's available
+    const allClearConsts = Object.getOwnPropertyNames(ciCD ?? {})
+      .filter(k => k.startsWith('CLEAR_'))
+      .map(k => `${k}=${ciCD[k]}`)
+      .join(', ');
+    console.log('[zen-dev-url] clearData flags available:', allClearConsts || '(none)');
+    // Resolve cache flag with all known aliases
+    const cacheFlag = ciCD?.CLEAR_CACHE ?? ciCD?.CLEAR_NETWORK_CACHE ?? ciCD?.CLEAR_IMAGE_CACHE;
     const cookieFlag  = ciCD?.CLEAR_COOKIES;
     const storageFlag = ciCD?.CLEAR_DOM_STORAGES;
-    const cacheFlag   = ciCD?.CLEAR_CACHE;
-    console.log('[zen-dev-url] clearData flags:',
+    console.log('[zen-dev-url] clearData resolved flags:',
       '\n  CLEAR_COOKIES:', cookieFlag,
       '\n  CLEAR_DOM_STORAGES:', storageFlag,
-      '\n  CLEAR_CACHE:', cacheFlag,
-      '\n  combined:', (cookieFlag | storageFlag | cacheFlag)
+      '\n  cache (CLEAR_CACHE/NETWORK/IMAGE):', cacheFlag,
+      '\n  combined:', ((cookieFlag ?? 0) | (storageFlag ?? 0) | (cacheFlag ?? 0))
     );
-    if (cookieFlag === undefined || storageFlag === undefined || cacheFlag === undefined) {
+    if (cookieFlag === undefined || storageFlag === undefined) {
       fail++;
-      console.error('[zen-dev-url] FAIL: one or more nsIClearDataService flag constants are undefined — clear site data will not work');
+      console.error('[zen-dev-url] FAIL: CLEAR_COOKIES or CLEAR_DOM_STORAGES is undefined — clear site data broken');
     } else {
       pass++;
+    }
+    if (cacheFlag === undefined) {
+      // Not fatal — we'll clear cookies+storage but skip cache
+      console.warn('[zen-dev-url] WARN: no cache clear constant found (CLEAR_CACHE/NETWORK_CACHE/IMAGE_CACHE all undefined) — cache will not be cleared');
     }
 
     // Custom port matching
