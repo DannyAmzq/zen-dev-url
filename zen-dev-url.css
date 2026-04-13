@@ -3,6 +3,11 @@
    Add the contents of this file to your userChrome.css
    ============================================================ */
 
+/* Sidebar tab labels — increase from default ~11px to 13px */
+.tab-label {
+    font-size: 13px !important;
+}
+
 /* Sidebar URL bar gets an orange outline on dev URLs */
 :root[zen-dev-url] #urlbar .urlbar-background {
     outline: 1.5px solid #ff6b35 !important;
@@ -17,6 +22,34 @@
     );
 }
 
+/* Active tab in sidebar gets a construction stripe border on dev URLs */
+:root[zen-dev-url] .tabbrowser-tab[selected] .tab-background {
+    position: relative !important;
+    overflow: visible !important;
+}
+
+:root[zen-dev-url] .tabbrowser-tab[selected] .tab-background::after {
+    content: '';
+    pointer-events: none;
+    position: absolute;
+    inset: -2px;
+    border-radius: 8px;
+    padding: 2px;
+    box-sizing: border-box;
+    background: repeating-linear-gradient(
+        -45deg,
+        #ff6b35 0px,
+        #ff6b35 4px,
+        rgba(120, 40, 10, 0.85) 4px,
+        rgba(120, 40, 10, 0.85) 8px
+    );
+    -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: destination-out;
+    mask-composite: exclude;
+}
+
 /* Dev banner shown above the page content */
 #zen-dev-url-banner {
     display: flex;
@@ -24,7 +57,7 @@
     pointer-events: none;
     position: fixed;
     top: 0;
-    height: 38px;
+    height: 44px;
     z-index: 9999;
     align-items: center;
     justify-content: flex-start;
@@ -34,10 +67,10 @@
             -45deg,
             transparent,
             transparent 6px,
-            rgba(255, 107, 53, 0.35) 6px,
-            rgba(255, 107, 53, 0.35) 12px
+            rgba(255, 107, 53, 0.18) 6px,
+            rgba(255, 107, 53, 0.18) 12px
         ),
-        color-mix(in srgb, #ff6b35 15%, var(--toolbar-bgcolor));
+        color-mix(in srgb, #ff6b35 28%, var(--toolbar-bgcolor));
     border-bottom: 1.5px solid #ff6b35;
     cursor: default;
     opacity: 0;
@@ -52,24 +85,24 @@
 
 /* Push the page content down so the banner doesn't overlap it */
 :root[zen-dev-url] #tabbrowser-tabpanels > .browserSidebarContainer {
-    padding-top: 38px !important;
+    padding-top: 44px !important;
     background-color: color-mix(in srgb, #ff6b35 15%, var(--toolbar-bgcolor)) !important;
 }
 
 /* Push Zen chrome elements below the dev banner */
 :root[zen-dev-url] #zen-toast-container {
-    top: 46px !important;
+    top: 52px !important;
 }
 
 :root[zen-dev-url] .screenshotsPagePanel {
-    margin-top: 38px !important;
+    margin-top: 44px !important;
 }
 
 :root[zen-dev-url] #zen-splitview-overlay-wrapper,
 :root[zen-dev-url] #fullscreen-warning,
 :root[zen-dev-url] #pointerlock-warning,
 :root[zen-dev-url] #fullscr-toggler {
-    margin-top: 38px !important;
+    margin-top: 44px !important;
 }
 
 #zen-dev-url-banner:hover {
@@ -78,42 +111,62 @@
             -45deg,
             transparent,
             transparent 6px,
-            rgba(255, 107, 53, 0.45) 6px,
-            rgba(255, 107, 53, 0.45) 12px
+            rgba(255, 107, 53, 0.25) 6px,
+            rgba(255, 107, 53, 0.25) 12px
         ),
-        color-mix(in srgb, #ff6b35 25%, var(--toolbar-bgcolor));
+        color-mix(in srgb, #ff6b35 35%, var(--toolbar-bgcolor));
 }
 
-/* Editable URL input inside the banner */
-#zen-dev-url-banner-input {
+/* Single contenteditable div — display and edit mode in one element */
+#zen-dev-url-field {
     flex: 1;
-    background: color-mix(in srgb, #ff6b35 8%, var(--toolbar-bgcolor));
-    border: none;
-    outline: none;
-    color: rgba(255, 255, 255, 0.85);
-    font-size: 11px;
-    font-family: monospace;
-    text-align: left;
-    cursor: text;
     min-width: 0;
     padding: 4px 8px;
     border-radius: 4px;
+    background: color-mix(in srgb, #ff6b35 8%, var(--toolbar-bgcolor));
+    font-size: 13px;
+    font-family: monospace !important;
+    line-height: 1.4;
+    letter-spacing: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    cursor: pointer;
+    outline: 1.5px solid transparent;
+    color: rgba(255, 255, 255, 0.85);
+    -moz-user-select: text;
 }
 
-#zen-dev-url-banner-input:focus {
-    color: #ffffff;
-    background: color-mix(in srgb, #ff6b35 15%, var(--toolbar-bgcolor));
+#zen-dev-url-field:hover {
+    background: color-mix(in srgb, #ff6b35 12%, var(--toolbar-bgcolor));
+}
+
+#zen-dev-url-field[contenteditable="true"] {
     cursor: text;
+    outline-color: rgba(255, 107, 53, 0.75);
+}
+
+.zen-dev-url-protocol {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.zen-dev-url-host {
+    color: rgba(255, 255, 255, 0.85);
 }
 
 .zen-dev-url-btn {
+    /* Firefox chrome applies -moz-appearance: button to HTML <button>s,
+       which on macOS renders a translucent native button and IGNORES
+       background-color. Force none so our dark fill actually paints. */
+    appearance: none !important;
+    -moz-appearance: none !important;
     flex-shrink: 0;
     margin-left: 4px;
     width: 26px;
     height: 22px;
     padding: 0;
-    background-color: rgba(255, 107, 53, 0.15);
-    border: 1px solid rgba(255, 107, 53, 0.4);
+    background-color: rgba(0, 0, 0, 0.55) !important;
+    background-image: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.55);
     border-radius: 4px;
     cursor: pointer;
     position: relative;
@@ -134,8 +187,9 @@
 }
 
 .zen-dev-url-btn:hover {
-    background-color: rgba(255, 107, 53, 0.3);
-    border-color: #ff6b35;
+    background-color: rgba(255, 107, 53, 0.7) !important;
+    background-image: none !important;
+    border-color: rgba(255, 255, 255, 0.55);
 }
 
 .zen-dev-url-btn:active {
@@ -191,4 +245,237 @@
 
 #zen-dev-url-network::before {
     mask-image: url('chrome://devtools/skin/images/tool-network.svg');
+}
+
+/* Gear / settings button icon */
+#zen-dev-url-settings::before {
+    mask-image: url('chrome://global/skin/icons/settings.svg');
+}
+
+/* Settings panel */
+#zen-dev-url-settings-panel {
+    display: none;
+    position: fixed;
+    z-index: 10000;
+    min-width: 260px;
+    background: color-mix(in srgb, #ff6b35 15%, Canvas);
+    border: 1.5px solid #ff6b35;
+    border-radius: 6px;
+    padding: 8px 0;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    font-family: monospace;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* Toggle rows */
+.zen-dev-url-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 14px;
+    gap: 16px;
+    user-select: none;
+}
+.zen-dev-url-toggle-row:hover {
+    background: rgba(255, 107, 53, 0.15);
+}
+.zen-dev-url-toggle-row > span {
+    flex: 1;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* Toggle switch */
+.zen-dev-url-toggle {
+    display: flex;
+    align-items: center;
+}
+.zen-dev-url-toggle input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+.zen-dev-url-toggle-track {
+    display: inline-block;
+    position: relative;
+    width: 32px;
+    height: 18px;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 9px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+.zen-dev-url-toggle-track::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.6);
+    transition: transform 0.15s ease, background 0.15s ease;
+}
+.zen-dev-url-toggle input:checked + .zen-dev-url-toggle-track {
+    background: #ff6b35;
+    border-color: #ff6b35;
+}
+.zen-dev-url-toggle input:checked + .zen-dev-url-toggle-track::after {
+    transform: translateX(14px);
+    background: #fff;
+}
+
+/* Dev mode toast notification */
+#zen-dev-url-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10001;
+    background: color-mix(in srgb, #ff6b35 30%, var(--toolbar-bgcolor));
+    border: 1.5px solid #ff6b35;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-family: monospace;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.9);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+#zen-dev-url-toast[data-visible] {
+    opacity: 1;
+}
+
+/* Viewport size readout in banner */
+#zen-dev-url-viewport {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-family: monospace;
+    color: rgba(255, 255, 255, 0.45);
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+    margin: 0 2px;
+}
+
+/* Settings panel section headers */
+.zen-dev-url-section-header {
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 107, 53, 0.8);
+    padding: 8px 14px 3px;
+    user-select: none;
+}
+
+/* Thin divider between settings sections */
+.zen-dev-url-panel-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 6px 0;
+}
+
+/* Text input rows for custom ports / patterns */
+.zen-dev-url-text-row {
+    display: flex;
+    flex-direction: column;
+    padding: 3px 14px 8px;
+    gap: 5px;
+}
+
+.zen-dev-url-text-row > span {
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 11px;
+    user-select: none;
+}
+
+.zen-dev-url-text-input {
+    appearance: none !important;
+    -moz-appearance: none !important;
+    background: rgba(0, 0, 0, 0.4) !important;
+    background-image: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.22) !important;
+    border-radius: 3px;
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-family: monospace !important;
+    font-size: 11px !important;
+    padding: 3px 7px;
+    outline: none !important;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.12s ease;
+}
+
+.zen-dev-url-text-input:focus {
+    border-color: rgba(255, 107, 53, 0.75) !important;
+}
+
+.zen-dev-url-text-input::placeholder {
+    color: rgba(255, 255, 255, 0.28);
+    opacity: 1;
+}
+
+/* Clear site data button — shows a check on success */
+#zen-dev-url-clear-data::before {
+    mask-image: url('chrome://global/skin/icons/delete.svg');
+}
+
+#zen-dev-url-clear-data[data-done]::before {
+    mask-image: url('chrome://global/skin/icons/check.svg');
+    background-color: #90ee90;
+}
+
+/* Settings panel — action button rows */
+.zen-dev-url-action-row {
+    padding: 4px 14px 6px;
+}
+
+.zen-dev-url-action-btn {
+    appearance: none !important;
+    -moz-appearance: none !important;
+    width: 100%;
+    padding: 5px 10px;
+    background: rgba(255, 107, 53, 0.18) !important;
+    background-image: none !important;
+    border: 1px solid rgba(255, 107, 53, 0.45) !important;
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-family: monospace !important;
+    font-size: 12px !important;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.12s ease;
+}
+
+.zen-dev-url-action-btn:hover {
+    background: rgba(255, 107, 53, 0.32) !important;
+}
+
+.zen-dev-url-action-btn:active {
+    transform: scale(0.98);
+}
+
+/* DevTools panel select dropdown in settings */
+.zen-dev-url-select {
+    appearance: none !important;
+    -moz-appearance: none !important;
+    background: rgba(0, 0, 0, 0.4) !important;
+    background-image: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.22) !important;
+    border-radius: 3px;
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-family: monospace !important;
+    font-size: 11px !important;
+    padding: 2px 6px;
+    cursor: pointer;
+    outline: none !important;
+}
+
+.zen-dev-url-select:focus {
+    border-color: rgba(255, 107, 53, 0.75) !important;
 }
