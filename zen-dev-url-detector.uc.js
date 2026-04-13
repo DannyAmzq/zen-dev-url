@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260413-2';
+  const ZEN_DEV_URL_VERSION = '20260413-3';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -143,6 +143,20 @@
           field.setAttribute('contenteditable', 'true');
         }
       });
+      // Text-editing keys (arrows, Home/End, Backspace/Delete, etc.) must not
+      // escape to window-level Zen keybindings — the URL bar and toolbar have
+      // chrome bindings on arrow keys that steal focus while we're editing.
+      // Run in mozSystemGroup capture phase so we fire before Zen's handlers.
+      field.addEventListener('keydown', (e) => {
+        if (field.getAttribute('contenteditable') !== 'true') return;
+        // Let Enter and Escape bubble to the outer handler below; everything
+        // else is text-editing — stop it from reaching chrome keybindings.
+        if (e.key === 'Enter' || e.key === 'Escape') return;
+        // Preserve regular browser shortcuts (Ctrl/Cmd-C/V/A/Z etc.).
+        if (e.ctrlKey || e.metaKey) return;
+        e.stopPropagation();
+      }, { capture: true, mozSystemGroup: true });
+
       field.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -326,11 +340,26 @@
       this._showDisplay = showDisplay;
       this._repositionBanner();
       this._createSettingsPanel();
-      // Re-align banner and refresh viewport on window resize or sidebar width changes
+      // Re-align banner and refresh viewport on window resize.
       window.addEventListener('resize', () => {
         this._repositionBanner();
         this._updateViewport();
       });
+      // Window resize doesn't fire when only the sidebar width changes (e.g.
+      // user toggles the sidebar or drags the splitter) — observe the content
+      // panel directly so the banner follows its left edge and width.
+      try {
+        const tabpanels = document.getElementById('tabbrowser-tabpanels');
+        if (tabpanels && typeof ResizeObserver === 'function') {
+          this._tabpanelsObserver = new ResizeObserver(() => {
+            this._repositionBanner();
+            this._updateViewport();
+          });
+          this._tabpanelsObserver.observe(tabpanels);
+        }
+      } catch (e) {
+        console.error('[zen-dev-url] ResizeObserver setup failed:', e);
+      }
     },
 
     /**
@@ -342,6 +371,9 @@
       const tabpanels = document.getElementById('tabbrowser-tabpanels');
       if (!tabpanels || !this._banner) return;
       const rect = tabpanels.getBoundingClientRect();
+      // Skip while layout is still initializing (common on window open) —
+      // writing left:0/width:0 would briefly cover the sidebar.
+      if (rect.width <= 0) return;
       this._banner.style.top = rect.top + 'px';
       this._banner.style.left = rect.left + 'px';
       this._banner.style.width = rect.width + 'px';
