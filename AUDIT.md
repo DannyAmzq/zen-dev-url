@@ -46,13 +46,13 @@ GitHub issues opened where appropriate.
 ### 2.1 Judgment calls — filed as GitHub issues
 
 These are real improvements but involve tradeoffs; see the linked issues for
-discussion. (Issues opened against `DannyAmzq/zen-dev-url`.)
+discussion.
 
-1. **Resize listener is not debounced** — every pixel of a window resize fires `_repositionBanner()` + `_updateViewport()`. Browsers throttle resize somewhat, but a debounce/requestAnimationFrame would be cheaper. Low urgency, but a cleanup win.
-2. **`_update()` reads `auto-open-devtools` pref on every navigation** — cheap, but could be cached on the pref observer for `zen.urlbar.dev-indicator.auto-open-devtools` since we already observe it.
-3. **Self-tests run on every window open and log to the *user's* browser console** — useful during dev, noise in prod. Consider gating behind a `zen.urlbar.dev-indicator.self-tests` pref (default off).
-4. **No global error handler** — every top-level listener is wrapped in try/catch individually. A single window-level `error` listener feeding into a `[zen-dev-url] FATAL:` channel would make first-response-to-bug-reports easier.
-5. **`_forcedBrowsers` / `_excludedBrowsers` state persists across URL changes** — if I force-enable dev mode on tab X, the banner stays on even if I navigate X to `https://example.com`. Is that the intent? Users might expect the force to reset on navigation. Currently documented as "works on any URL — forced-on overrides URL checks" but the persistence wasn't discussed.
+- **#2 — Debounce the resize handler** — every pixel of a window resize fires `_repositionBanner()` + `_updateViewport()`. Browsers throttle resize somewhat, but a single-`requestAnimationFrame` wrap would cut down work during a drag.
+- **#3 — Gate self-tests behind a pref (default off in prod)** — the IIFE at `zen-dev-url-detector.uc.js:847` runs on every window open and logs to the user's console. Useful during dev, noise in prod.
+- **#4 — Clarify expected behaviour of Alt+Shift+D force-toggle across navigations** — `_forcedBrowsers` / `_excludedBrowsers` persist for the lifetime of the `<browser>` element, so forcing dev-on survives a same-tab navigation. Documentation call more than a code bug.
+- **#5 — Add a single top-level error handler** — everything is individually try/caught today, but a window-level `error` listener tagged `[zen-dev-url] FATAL:` would make bug reports easier to triage.
+- **#6 — Cache `auto-open-devtools` pref instead of reading on every `_update()`** — pref reads are cheap but we already observe the pref, so caching is the cleaner code.
 
 ### 2.2 Things I noticed but left alone
 
