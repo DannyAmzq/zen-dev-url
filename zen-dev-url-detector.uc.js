@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260413-1';
+  const ZEN_DEV_URL_VERSION = '20260413-2';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -29,8 +29,11 @@
     /** about:config preference key that enables/disables the indicator */
     PREF: 'zen.urlbar.show-dev-indicator',
 
-    /** Exact hostnames always treated as dev */
-    _devHosts: new Set(['localhost', '127.0.0.1', '[::1]']),
+    /** Exact hostnames always treated as dev.
+     *  Note: nsIURI.host returns IPv6 addresses WITHOUT brackets
+     *  (e.g. http://[::1]:8080/ → uri.host === '::1'), so we store
+     *  the bare form here to match. */
+    _devHosts: new Set(['localhost', '127.0.0.1', '::1']),
 
     /** TLD suffixes always treated as dev */
     _devTLDs: ['.local', '.localhost', '.internal', '.test'],
@@ -73,9 +76,11 @@
       // the banner even on dev URLs. mozSystemGroup: true fires before web content.
       window.addEventListener('keydown', (e) => {
         if (e.altKey && e.shiftKey && e.key === 'D') {
+          // Respect the master off switch BEFORE eating the event — otherwise
+          // a disabled mod still swallows the user's Alt+Shift+D.
+          if (!this._enabled) return;
           e.preventDefault();
           e.stopImmediatePropagation();
-          if (!this._enabled) return;
           const browser = gBrowser.selectedBrowser;
           const forced = this._forcedBrowsers.has(browser);
           const excluded = this._excludedBrowsers.has(browser);
@@ -384,15 +389,19 @@
           const ports = customPorts.split(',').map(p => p.trim()).filter(Boolean);
           if (ports.includes(String(uri.port))) return true;
         }
-        // Custom host patterns — simple glob (* = any chars, ? = one char)
+        // Custom host patterns — simple glob (* = any chars, ? = one char).
+        // Individual bad patterns must not break detection for the others, so
+        // each regex compile/test is isolated.
         const customPatterns = Services.prefs.getStringPref('zen.urlbar.dev-indicator.custom-patterns', '');
         if (customPatterns) {
           const patterns = customPatterns.split(',').map(p => p.trim()).filter(Boolean);
           for (const pat of patterns) {
-            const re = new RegExp(
-              '^' + pat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$'
-            );
-            if (re.test(host)) return true;
+            try {
+              const re = new RegExp(
+                '^' + pat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$'
+              );
+              if (re.test(host)) return true;
+            } catch { /* invalid pattern — skip silently */ }
           }
         }
         return false;
@@ -900,6 +909,10 @@
     assert('port 9000 not in list', portMatch('3000, 5173, 8080', 9000), false);
     assert('port -1 never matches', portMatch('3000', -1),               false);
     assert('empty list never matches', portMatch('', 3000),              false);
+
+    // IPv6 localhost: nsIURI.host returns '::1' (no brackets); _devHosts must
+    // contain the bare form or the match silently fails for http://[::1]/ URLs.
+    assert('IPv6 localhost (::1) is in _devHosts', detector._devHosts.has('::1'), true);
 
     const status = fail === 0
       ? `%c[zen-dev-url] self-tests: ${pass}/${pass} passed`
