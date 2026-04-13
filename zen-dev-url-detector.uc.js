@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260412-24';
+  const ZEN_DEV_URL_VERSION = '20260413-1';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -269,6 +269,10 @@
       const reloadBtn = makeBtn('zen-dev-url-clear-refresh', 'Clear cache and reload',
         () => gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE));
 
+      // Screenshot button — grouped with devtools (it's a dev capture tool)
+      const screenshotBtn = makeBtn('zen-dev-url-screenshot', 'Take screenshot',
+        () => toggleScreenshot());
+
       // DevTools group: inspector, console, network (separate from page tools)
       const devButtons = [
         makeBtn('zen-dev-url-inspector', 'Inspect element', () => {
@@ -293,13 +297,14 @@
       const viewportEl = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
       viewportEl.id = 'zen-dev-url-viewport';
 
-      // Layout: [field] [copy] | sep | [clear-data] [reload] | sep | [inspector] [console] [network] | sep | [viewport] | sep | [gear]
+      // Layout: [field] [copy] | sep | [clear-data] [reload] | sep | [screenshot] [inspector] [console] [network] | sep | [viewport] | sep | [gear]
       banner.appendChild(field);
       banner.appendChild(copyBtn);
       banner.appendChild(makeSeparator());
       banner.appendChild(clearSiteData);
       banner.appendChild(reloadBtn);
       banner.appendChild(makeSeparator());
+      banner.appendChild(screenshotBtn);
       for (const btn of devButtons) {
         banner.appendChild(btn);
       }
