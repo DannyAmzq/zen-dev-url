@@ -127,6 +127,85 @@ After that, follow the one-time prompt in `about:config`, then restart Zen.
 
 ---
 
+### Linux
+
+Zen Browser ships for Linux in three forms — the install experience differs per method.
+
+---
+
+#### Flatpak *(most common on modern distros)*
+
+```bash
+bash install.sh
+```
+
+The script detects the Flatpak install automatically (app ID: `app.zen_browser.zen`) and copies the userscript and CSS into your profile. **However**, the Flatpak app bundle is read-only, so fx-autoconfig's program files (`config.js`) cannot be written there automatically.
+
+You need to install fx-autoconfig's profile side manually:
+
+```bash
+# Download fx-autoconfig
+curl -fsSL https://github.com/MrOtherGuy/fx-autoconfig/archive/refs/heads/master.zip \
+  -o /tmp/fx-autoconfig.zip
+unzip -q /tmp/fx-autoconfig.zip -d /tmp/fxac
+
+# Find your profile (path printed by install.sh)
+PROFILE="$HOME/.var/app/app.zen_browser.zen/zen/<your-profile>"
+
+mkdir -p "$PROFILE/chrome/utils"
+cp -r /tmp/fxac/fx-autoconfig-master/profile/chrome/utils/. "$PROFILE/chrome/utils/"
+```
+
+> The program-side `config.js` for Flatpak requires a Flatpak override. Until the Flatpak maintainers add an official hook, the cleanest workaround is to use the **tarball install** instead.
+
+---
+
+#### Tarball / manual extract *(full support)*
+
+Extract the Zen tarball to a user-owned directory, then:
+
+```bash
+bash install.sh
+```
+
+The script finds the extracted binary, writes fx-autoconfig's program files alongside it (no `sudo` needed since you own the directory), and copies the userscript and CSS.
+
+Common extraction locations it checks automatically:
+- `~/.local/share/zen-browser/`
+- `~/.local/zen-browser/`
+- `/opt/zen-browser/`
+
+---
+
+#### AppImage
+
+AppImages are read-only squashfs mounts — fx-autoconfig cannot be written into them at runtime. Extract it first:
+
+```bash
+./zen.AppImage --appimage-extract
+mv squashfs-root ~/.local/zen-browser
+# Then run zen from ~/.local/zen-browser/zen
+bash install.sh
+```
+
+After extraction `install.sh` treats it the same as a tarball install.
+
+---
+
+#### Package manager (AUR, etc.)
+
+```bash
+bash install.sh
+```
+
+If the package installed Zen to `/opt/zen-browser/` or `/usr/lib/zen-browser/` the script will find it. Resources under `/opt` are typically user-writable; resources under `/usr/lib` need `sudo` — the script will fail with a permission error if so. In that case prefix with `sudo`:
+
+```bash
+sudo bash install.sh
+```
+
+---
+
 ### Windows — WSL (Ubuntu)
 
 Open a WSL terminal inside this repo's directory:
@@ -203,6 +282,41 @@ Restart Zen and confirm the version number bumped in the console.
 git pull
 .\install.ps1
 ```
+
+---
+
+## Testing the Linux installer without a Linux machine
+
+You don't need a Linux VM. Since you already have WSL2 (Ubuntu), Docker is the easiest path — Docker Desktop for Windows uses WSL2 as its backend, so no extra setup is needed.
+
+### With Docker (recommended)
+
+```bash
+# From WSL2 — mock the Zen Flatpak directory structure
+docker run --rm -it -v "$PWD:/repo" ubuntu:24.04 bash -c "
+  apt-get update -q && apt-get install -q -y curl unzip &&
+  # Simulate a Flatpak profile
+  mkdir -p /root/.var/app/app.zen_browser.zen/zen/default &&
+  touch /root/.var/app/app.zen_browser.zen/zen/profiles.ini &&
+  printf '[Install1234]\nDefault=default\n' > /root/.var/app/app.zen_browser.zen/zen/profiles.ini &&
+  mkdir -p /root/.var/app/app.zen_browser.zen/zen/default/chrome &&
+  touch /root/.var/app/app.zen_browser.zen/zen/default/chrome/userChrome.css &&
+  cd /repo &&
+  bash install.sh
+"
+```
+
+This runs the installer inside a clean Ubuntu container against a mocked profile tree. You can inspect the resulting `chrome/JS/` and `chrome/userChrome.css` to verify the output.
+
+For a tarball install simulation, add a fake `zen` binary:
+
+```bash
+mkdir -p /root/.local/zen-browser && touch /root/.local/zen-browser/zen && chmod +x /root/.local/zen-browser/zen
+```
+
+### With GitHub Actions
+
+Add a workflow to run `install.sh` on a real Linux runner automatically on every push — see `.github/workflows/` if one is added in the future.
 
 ---
 

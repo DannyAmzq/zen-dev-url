@@ -22,30 +22,66 @@ error()   { echo -e "${RED}[zen-dev-url]${NC} $1"; exit 1; }
 
 # ── 1. Detect OS and Zen paths ───────────────────────────────
 
+IS_FLATPAK=false
+ZEN_RESOURCES=""
+
 if [[ "$OSTYPE" == "darwin"* ]]; then
   ZEN_APP="/Applications/Zen.app"
   ZEN_RESOURCES="$ZEN_APP/Contents/Resources"
   PROFILES_INI="$HOME/Library/Application Support/Zen/profiles.ini"
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-  # Check common install locations: native package, Flatpak, tarball
-  if   [[ -f "$HOME/.local/share/zen-browser/zen" ]]; then
-    ZEN_RESOURCES="$HOME/.local/share/zen-browser"
-  elif [[ -f "/opt/zen-browser/zen" ]]; then
-    ZEN_RESOURCES="/opt/zen-browser"
-  elif [[ -f "/usr/lib/zen/zen" ]]; then
-    ZEN_RESOURCES="/usr/lib/zen"
+
+elif [[ "$OSTYPE" == "linux-gnu"* || "$OSTYPE" == "linux"* ]]; then
+  # ── Flatpak (app bundle is read-only; profile lives under ~/.var/app) ──
+  FLATPAK_ID="app.zen_browser.zen"
+  FLATPAK_LEGACY_ID="io.github.zen_browser.zen"
+  if   flatpak info "$FLATPAK_ID" &>/dev/null || [[ -d "$HOME/.var/app/$FLATPAK_ID" ]]; then
+    IS_FLATPAK=true
+    PROFILES_INI="$HOME/.var/app/$FLATPAK_ID/zen/profiles.ini"
+    info "Flatpak install detected (app ID: $FLATPAK_ID)"
+  elif flatpak info "$FLATPAK_LEGACY_ID" &>/dev/null || [[ -d "$HOME/.var/app/$FLATPAK_LEGACY_ID" ]]; then
+    IS_FLATPAK=true
+    PROFILES_INI="$HOME/.var/app/$FLATPAK_LEGACY_ID/zen/profiles.ini"
+    info "Flatpak install detected (legacy app ID: $FLATPAK_LEGACY_ID)"
   else
-    # Flatpak: resources live inside the app bundle, userscript goes in profile only
-    _zen_bin=$(find /opt /usr/lib /usr/local/lib "$HOME/.local" -name "zen" -type f 2>/dev/null | head -1)
-    [[ -z "$_zen_bin" ]] && error "Could not find Zen installation. Is Zen Browser installed?"
-    ZEN_RESOURCES=$(dirname "$_zen_bin")
+    # ── Tarball / package install — resources are writable ──
+    for _candidate in \
+        "$HOME/.local/share/zen-browser" \
+        "$HOME/.local/zen-browser" \
+        "$HOME/.local/zen" \
+        "/opt/zen-browser" \
+        "/opt/zen" \
+        "/usr/lib/zen-browser" \
+        "/usr/lib/zen"; do
+      if [[ -f "$_candidate/zen" ]]; then
+        ZEN_RESOURCES="$_candidate"
+        break
+      fi
+    done
+    # Last resort: search common parent directories
+    if [[ -z "$ZEN_RESOURCES" ]]; then
+      _bin=$(find "$HOME/.local" /opt /usr/lib /usr/local/lib -maxdepth 4 \
+               -name "zen" -type f 2>/dev/null | head -1)
+      [[ -n "$_bin" ]] && ZEN_RESOURCES=$(dirname "$_bin")
+    fi
+    [[ -z "$ZEN_RESOURCES" ]] && error "Could not find Zen installation. Is Zen Browser installed?"
+    PROFILES_INI="$HOME/.zen/profiles.ini"
+    # AppImage: binary is there but inside a read-only squashfs mount
+    if [[ "$ZEN_RESOURCES" == /tmp/.mount_* ]]; then
+      warn "AppImage mount detected — app bundle is read-only."
+      warn "Extract the AppImage to a writable location first, then re-run this script."
+      warn "  ./zen.AppImage --appimage-extract"
+      warn "  mv squashfs-root ~/.local/zen-browser"
+      exit 1
+    fi
   fi
-  PROFILES_INI="$HOME/.zen/profiles.ini"
+
 else
   error "Unsupported OS: $OSTYPE. Use install.ps1 on Windows."
 fi
 
-info "Zen resources: $ZEN_RESOURCES"
+if [[ "$IS_FLATPAK" == "false" ]]; then
+  info "Zen resources: $ZEN_RESOURCES"
+fi
 
 # ── 2. Find the default profile ─────────────────────────────
 
@@ -86,35 +122,43 @@ success "Found profile: $PROFILE_DIR"
 
 # ── 3. Check / install fx-autoconfig ────────────────────────
 
-CONFIG_JS="$ZEN_RESOURCES/config.js"
-CONFIG_PREFS="$ZEN_RESOURCES/defaults/pref/config-prefs.js"
-
-if [[ -f "$CONFIG_JS" ]]; then
-  success "fx-autoconfig already installed, skipping."
+if [[ "$IS_FLATPAK" == "true" ]]; then
+  warn "Flatpak: app bundle is read-only — skipping fx-autoconfig program files."
+  warn "You must install fx-autoconfig manually into your profile's chrome/utils/ folder."
+  warn "See: https://github.com/MrOtherGuy/fx-autoconfig#for-flatpak-installs"
+  warn "(The userscript and CSS will still be copied so you are ready once fx-autoconfig is set up.)"
+  echo ""
 else
-  info "Installing fx-autoconfig..."
+  CONFIG_JS="$ZEN_RESOURCES/config.js"
+  CONFIG_PREFS="$ZEN_RESOURCES/defaults/pref/config-prefs.js"
 
-  TMP_DIR=$(mktemp -d)
-  trap 'rm -rf "$TMP_DIR"' EXIT
-
-  curl -fsSL https://github.com/MrOtherGuy/fx-autoconfig/archive/refs/heads/master.zip \
-    -o "$TMP_DIR/fx-autoconfig.zip"
-  unzip -q "$TMP_DIR/fx-autoconfig.zip" -d "$TMP_DIR"
-
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    sudo cp "$TMP_DIR/fx-autoconfig-master/program/config.js" "$CONFIG_JS"
-    sudo mkdir -p "$ZEN_RESOURCES/defaults/pref"
-    sudo cp "$TMP_DIR/fx-autoconfig-master/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
+  if [[ -f "$CONFIG_JS" ]]; then
+    success "fx-autoconfig already installed, skipping."
   else
-    cp "$TMP_DIR/fx-autoconfig-master/program/config.js" "$CONFIG_JS"
-    mkdir -p "$ZEN_RESOURCES/defaults/pref"
-    cp "$TMP_DIR/fx-autoconfig-master/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
-  fi
+    info "Installing fx-autoconfig..."
 
-  CHROME_UTILS="$PROFILE_DIR/chrome/utils"
-  mkdir -p "$CHROME_UTILS"
-  cp -r "$TMP_DIR/fx-autoconfig-master/profile/chrome/utils/." "$CHROME_UTILS/"
-  success "fx-autoconfig installed."
+    TMP_DIR=$(mktemp -d)
+    trap 'rm -rf "$TMP_DIR"' EXIT
+
+    curl -fsSL https://github.com/MrOtherGuy/fx-autoconfig/archive/refs/heads/master.zip \
+      -o "$TMP_DIR/fx-autoconfig.zip"
+    unzip -q "$TMP_DIR/fx-autoconfig.zip" -d "$TMP_DIR"
+
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      sudo cp "$TMP_DIR/fx-autoconfig-master/program/config.js" "$CONFIG_JS"
+      sudo mkdir -p "$ZEN_RESOURCES/defaults/pref"
+      sudo cp "$TMP_DIR/fx-autoconfig-master/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
+    else
+      cp "$TMP_DIR/fx-autoconfig-master/program/config.js" "$CONFIG_JS"
+      mkdir -p "$ZEN_RESOURCES/defaults/pref"
+      cp "$TMP_DIR/fx-autoconfig-master/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
+    fi
+
+    CHROME_UTILS="$PROFILE_DIR/chrome/utils"
+    mkdir -p "$CHROME_UTILS"
+    cp -r "$TMP_DIR/fx-autoconfig-master/profile/chrome/utils/." "$CHROME_UTILS/"
+    success "fx-autoconfig installed."
+  fi
 fi
 
 # ── 4. Copy userscript ──────────────────────────────────────
