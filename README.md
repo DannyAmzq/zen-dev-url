@@ -208,17 +208,20 @@ sudo bash install.sh
 
 ### Windows — WSL (Ubuntu)
 
-Open a WSL terminal inside this repo's directory:
+Open a WSL terminal inside this repo's directory. The snippet loops over every installed Zen channel (release/beta/twilight) it finds in `profiles.ini`, so multi-channel users don't have to target one by hand.
 
 ```bash
 WINUSER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
 ZEN="/mnt/c/Users/$WINUSER/AppData/Roaming/zen"
-PROFILE=$(awk '/^\[Install/{f=1} f && /^Path=/{print substr($0,6); exit}' "$ZEN/profiles.ini" | tr -d '\r')
-CHROME="$ZEN/$PROFILE/chrome"
 
-cp zen-dev-url-detector.uc.js "$CHROME/JS/" && echo "JS ok"
-sed -i '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css"
-{ printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css" && echo "CSS ok"
+while IFS= read -r PROFILE; do
+  CHROME="$ZEN/$PROFILE/chrome"
+  echo "→ $(basename "$PROFILE")"
+  cp zen-dev-url-detector.uc.js "$CHROME/JS/" && echo "  JS OK" || echo "  JS FAILED"
+  sed -i '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css"
+  { printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css" && echo "  CSS OK" || echo "  CSS FAILED"
+done < <(awk '/^\[Install/{f=1;next} /^\[/{f=0} f && /^Default=Profiles\//{print substr($0,9)}' \
+  "$ZEN/profiles.ini" | tr -d '\r')
 ```
 
 Then **fully quit and reopen Zen** (File → Quit, not just close window).
@@ -246,8 +249,8 @@ Then **fully quit and reopen Zen** (File → Quit, not just close window).
 Open the browser console (`Cmd+Option+J` on Mac, `Ctrl+Shift+J` on Windows) after restart. You should see:
 
 ```
-[zen-dev-url] v20260412-24 loaded   ← styled in orange
-[zen-dev-url] self-tests: 15/15 passed
+[zen-dev-url] v20260413-2 loaded   ← styled in orange
+[zen-dev-url] self-tests: 16/16 passed
 ```
 
 Then navigate to `http://localhost` — the banner should appear.
@@ -263,16 +266,18 @@ git pull && bash install.sh
 
 ### WSL
 ```bash
-git pull
-
-WINUSER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
-ZEN="/mnt/c/Users/$WINUSER/AppData/Roaming/zen"
-PROFILE=$(awk '/^\[Install/{f=1} f && /^Path=/{print substr($0,6); exit}' "$ZEN/profiles.ini" | tr -d '\r')
-CHROME="$ZEN/$PROFILE/chrome"
-
-cp zen-dev-url-detector.uc.js "$CHROME/JS/" && echo "JS ok"
-sed -i '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css"
-{ printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css" && echo "CSS ok"
+git pull && {
+  WINUSER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
+  ZEN="/mnt/c/Users/$WINUSER/AppData/Roaming/zen"
+  while IFS= read -r PROFILE; do
+    CHROME="$ZEN/$PROFILE/chrome"
+    echo "→ $(basename "$PROFILE")"
+    cp zen-dev-url-detector.uc.js "$CHROME/JS/" && echo "  JS OK" || echo "  JS FAILED"
+    sed -i '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css"
+    { printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css" && echo "  CSS OK" || echo "  CSS FAILED"
+  done < <(awk '/^\[Install/{f=1;next} /^\[/{f=0} f && /^Default=Profiles\//{print substr($0,9)}' \
+    "$ZEN/profiles.ini" | tr -d '\r')
+}
 ```
 
 Restart Zen and confirm the version number bumped in the console.
@@ -295,12 +300,12 @@ You don't need a Linux VM. Since you already have WSL2 (Ubuntu), Docker is the e
 # From WSL2 — mock the Zen Flatpak directory structure
 docker run --rm -it -v "$PWD:/repo" ubuntu:24.04 bash -c "
   apt-get update -q && apt-get install -q -y curl unzip &&
-  # Simulate a Flatpak profile
-  mkdir -p /root/.var/app/app.zen_browser.zen/zen/default &&
-  touch /root/.var/app/app.zen_browser.zen/zen/profiles.ini &&
-  printf '[Install1234]\nDefault=default\n' > /root/.var/app/app.zen_browser.zen/zen/profiles.ini &&
-  mkdir -p /root/.var/app/app.zen_browser.zen/zen/default/chrome &&
-  touch /root/.var/app/app.zen_browser.zen/zen/default/chrome/userChrome.css &&
+  # Simulate a Flatpak profile (must match the 'Default=Profiles/...'
+  # format that the real installer parses from [Install{hash}] sections)
+  ZEN_DIR=/root/.var/app/app.zen_browser.zen/zen &&
+  mkdir -p \$ZEN_DIR/Profiles/default/chrome &&
+  printf '[Install1234]\nDefault=Profiles/default\n' > \$ZEN_DIR/profiles.ini &&
+  touch \$ZEN_DIR/Profiles/default/chrome/userChrome.css &&
   cd /repo &&
   bash install.sh
 "
@@ -324,18 +329,26 @@ Add a workflow to run `install.sh` on a real Linux runner automatically on every
 
 All preferences are under `zen.urlbar.*`. You can tweak them directly in `about:config` or through the gear panel.
 
+**zen-dev-url prefs** (created by this mod):
+
 | Preference | Default | Description |
 |---|---|---|
 | `zen.urlbar.show-dev-indicator` | `true` | Master on/off switch |
 | `zen.urlbar.dev-indicator.include-zero-host` | `true` | Match `0.0.0.0` |
-| `zen.urlbar.dev-indicator.include-local-tlds` | `true` | Match `.local` / `.test` / etc. |
+| `zen.urlbar.dev-indicator.include-local-tlds` | `true` | Match `.local` / `.test` / `.localhost` / `.internal` |
+| `zen.urlbar.dev-indicator.include-file-urls` | `false` | Match `file://` URLs |
 | `zen.urlbar.dev-indicator.custom-ports` | `""` | Comma-separated port list |
-| `zen.urlbar.dev-indicator.custom-patterns` | `""` | Comma-separated glob patterns |
-| `zen.urlbar.dev-indicator.disable-cache` | `false` | Disable HTTP cache |
-| `zen.urlbar.dev-indicator.allow-mixed-content` | `false` | Allow mixed content |
-| `zen.urlbar.dev-indicator.disable-js` | `false` | Disable JavaScript |
-| `zen.urlbar.dev-indicator.auto-open-devtools` | `false` | Auto-open DevTools on nav |
-| `zen.urlbar.dev-indicator.devtools-panel` | `"webconsole"` | Panel opened by auto-open |
+| `zen.urlbar.dev-indicator.custom-patterns` | `""` | Comma-separated glob host patterns |
+| `zen.urlbar.dev-indicator.auto-open-devtools` | `false` | Auto-open DevTools on every dev URL navigation |
+| `zen.urlbar.dev-indicator.auto-open-panel` | `"webconsole"` | Which panel auto-open uses (`webconsole` / `netmonitor` / `inspector`) |
+
+**Firefox prefs** (not owned by this mod — the settings panel just toggles them so your changes survive restart):
+
+| Preference | Default | Description |
+|---|---|---|
+| `devtools.cache.disabled` | `false` | Disable HTTP cache |
+| `security.mixed_content.block_active_content` | `true` | Block mixed content (panel toggle is inverted: unchecked = block) |
+| `javascript.enabled` | `true` | JavaScript enabled globally |
 
 ---
 

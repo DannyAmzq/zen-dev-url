@@ -96,10 +96,13 @@ $FxSrc    = $null
 $needsDownload = (-not (Test-Path $ConfigJs)) -or
                  ($ProfileDirs | Where-Object { -not (Test-Path (Join-Path $_ "chrome\utils")) }).Count -gt 0
 
+$TmpDir = $null
 if ($needsDownload) {
   Info "Downloading fx-autoconfig..."
 
   $TmpDir  = Join-Path $env:TEMP "fx-autoconfig-install"
+  # Clean any leftovers from a previous run so Expand-Archive doesn't see stale files
+  if (Test-Path $TmpDir) { Remove-Item $TmpDir -Recurse -Force }
   New-Item -ItemType Directory -Force -Path $TmpDir | Out-Null
 
   $ZipPath = Join-Path $TmpDir "fx-autoconfig.zip"
@@ -162,6 +165,9 @@ foreach ($ProfileDir in $ProfileDirs) {
 }
 
 if ($Installed -eq 0) { Fail "No profiles were successfully installed to." }
+
+# Clean up the fx-autoconfig download dir
+if ($TmpDir -and (Test-Path $TmpDir)) { Remove-Item $TmpDir -Recurse -Force }
 
 # ── 5. Remind about about:config ─────────────────────────────
 

@@ -218,15 +218,6 @@
     background-color: #90ee90;
 }
 
-#zen-dev-url-copy-link::before {
-    mask-image: url('chrome://global/skin/icons/edit-copy.svg');
-}
-
-#zen-dev-url-copy-link[data-copied]::before {
-    mask-image: url('chrome://global/skin/icons/check.svg');
-    background-color: #90ee90;
-}
-
 #zen-dev-url-clear-refresh::before {
     mask-image: url('chrome://global/skin/icons/reload.svg');
 }
