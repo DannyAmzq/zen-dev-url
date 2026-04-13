@@ -143,6 +143,14 @@
 #zen-dev-url-field[contenteditable="true"] {
     cursor: text;
     outline-color: rgba(255, 107, 53, 0.75);
+    /* Let the caret scroll into view while editing long URLs —
+       display mode clips via overflow:hidden, edit mode scrolls. */
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+#zen-dev-url-field[contenteditable="true"]::-webkit-scrollbar {
+    display: none;
 }
 
 .zen-dev-url-protocol {
