@@ -26,7 +26,7 @@ Then fully restart Zen and open the browser console (`Cmd+Option+J` or `Ctrl+Shi
 ```bash
 WINUSER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
 ZEN="/mnt/c/Users/$WINUSER/AppData/Roaming/zen"
-PROFILE=$(awk '/Default=1/{f=1} f && /^Path=/{print substr($0,6); exit}' "$ZEN/profiles.ini" | tr -d '\r')
+PROFILE=$(awk '/^\[Install/{f=1} f && /^Default=/{print substr($0,9); f=0}' "$ZEN/profiles.ini" | tr -d '\r')
 CHROME="$ZEN/$PROFILE/chrome"
 
 cp zen-dev-url-detector.uc.js "$CHROME/JS/" && echo "JS copied OK" || echo "JS FAILED"
