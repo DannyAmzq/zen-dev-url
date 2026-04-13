@@ -27,106 +27,143 @@ if (-not $ZenExe) { Fail "Could not find Zen Browser installation." }
 $ZenResources = Split-Path -Parent $ZenExe
 Info "Zen resources: $ZenResources"
 
-# ── 2. Find the default profile ──────────────────────────────
+# ── 2. Find all Zen profiles ─────────────────────────────────
+# Each installed Zen channel (release/beta/twilight) has its own [Install{hash}]
+# section in profiles.ini. Collect all of them so we install to every channel.
+#
+# Reset $inInstall on any non-Install section header so we don't accidentally
+# pick up the boolean Default=1 that appears in [Profile] sections.
 
 $ProfilesIni = "$env:APPDATA\zen\profiles.ini"
 if (-not (Test-Path $ProfilesIni)) { Fail "profiles.ini not found at: $ProfilesIni" }
 
-$iniContent = Get-Content $ProfilesIni
-$profilePath = $null
-$isRelative  = $true
+$iniContent  = Get-Content $ProfilesIni
+$rawPaths    = @()
+$inInstall   = $false
 
-# Preferred: [Install{hash}] section — tracks the profile Zen actually launched last
-$inInstall = $false
 foreach ($line in $iniContent) {
-  if     ($line -match '^\[Install')       { $inInstall = $true }
-  elseif ($line -match '^\[')              { $inInstall = $false }
-  elseif ($inInstall -and $line -match '^Default=(.+)') {
-    $profilePath = $Matches[1].Trim()
-    $isRelative  = $true   # [Install] Default= paths are always relative
-    break
+  if     ($line -match '^\[Install')                       { $inInstall = $true }
+  elseif ($line -match '^\[')                              { $inInstall = $false }
+  elseif ($inInstall -and $line -match '^Default=(Profiles.+)') {
+    $rawPaths  += $Matches[1].Trim()
+    $inInstall  = $false   # one Default= per Install section
   }
 }
 
-# Fallback: profile section marked Default=1
-if (-not $profilePath) {
+# Fallback: [Profile] section marked Default=1
+if ($rawPaths.Count -eq 0) {
   $curPath = $null; $curRelative = $true; $curDefault = $false
   foreach ($line in $iniContent) {
     if ($line -match '^\[Profile') {
-      if ($curDefault -and $curPath) { $profilePath = $curPath; $isRelative = $curRelative; break }
+      if ($curDefault -and $curPath) { $rawPaths += $curPath; break }
       $curPath = $null; $curRelative = $true; $curDefault = $false
     }
     elseif ($line -match '^Path=(.+)')    { $curPath = $Matches[1] }
     elseif ($line -match '^IsRelative=0') { $curRelative = $false }
     elseif ($line -match '^Default=1')    { $curDefault = $true }
   }
-  if (-not $profilePath -and $curDefault -and $curPath) { $profilePath = $curPath; $isRelative = $curRelative }
+  if ($rawPaths.Count -eq 0 -and $curDefault -and $curPath) { $rawPaths += $curPath }
 }
 
-if (-not $profilePath) { Fail "Could not find default profile in profiles.ini." }
+if ($rawPaths.Count -eq 0) { Fail "Could not find any profiles in profiles.ini." }
 
-$ProfileDir = if ($isRelative) {
-  Join-Path "$env:APPDATA\zen" $profilePath
-} else { $profilePath }
+$ProfileDirs = @()
+foreach ($p in $rawPaths) {
+  $dir = if ($p -match '^[A-Za-z]:\\') { $p } else { Join-Path "$env:APPDATA\zen" $p }
+  if (Test-Path $dir) {
+    $ProfileDirs += $dir
+  } else {
+    Warn "Profile directory not found, skipping: $dir"
+  }
+}
+if ($ProfileDirs.Count -eq 0) { Fail "No valid profile directories found." }
 
-if (-not (Test-Path $ProfileDir)) { Fail "Profile directory not found: $ProfileDir" }
-Success "Found profile: $ProfileDir"
+if ($ProfileDirs.Count -eq 1) {
+  Info "Detected profile: $($ProfileDirs[0])"
+} else {
+  Info "Detected $($ProfileDirs.Count) Zen channel profiles — installing to all:"
+  foreach ($d in $ProfileDirs) { Info "  $d" }
+}
 
 # ── 3. Check / install fx-autoconfig ─────────────────────────
+# Program files go into the Zen binary directory (once).
+# Utils go into each profile's chrome\utils\ (per-profile loop below).
 
 $ConfigJs = Join-Path $ZenResources "config.js"
+$FxSrc    = $null
 
-if (Test-Path $ConfigJs) {
-  Success "fx-autoconfig already installed, skipping."
-} else {
-  Info "Installing fx-autoconfig..."
+# Download source if program files are missing OR any profile is missing utils
+$needsDownload = (-not (Test-Path $ConfigJs)) -or
+                 ($ProfileDirs | Where-Object { -not (Test-Path (Join-Path $_ "chrome\utils")) }).Count -gt 0
 
-  $TmpDir = Join-Path $env:TEMP "fx-autoconfig-install"
+if ($needsDownload) {
+  Info "Downloading fx-autoconfig..."
+
+  $TmpDir  = Join-Path $env:TEMP "fx-autoconfig-install"
   New-Item -ItemType Directory -Force -Path $TmpDir | Out-Null
 
   $ZipPath = Join-Path $TmpDir "fx-autoconfig.zip"
   Invoke-WebRequest -Uri "https://github.com/MrOtherGuy/fx-autoconfig/archive/refs/heads/master.zip" `
     -OutFile $ZipPath
   Expand-Archive -Path $ZipPath -DestinationPath $TmpDir -Force
-
   $FxSrc = Join-Path $TmpDir "fx-autoconfig-master"
-  Copy-Item "$FxSrc\program\config.js" $ConfigJs
 
-  $PrefsDir = Join-Path $ZenResources "defaults\pref"
-  New-Item -ItemType Directory -Force -Path $PrefsDir | Out-Null
-  Copy-Item "$FxSrc\program\defaults\pref\config-prefs.js" "$PrefsDir\config-prefs.js"
+  if (-not (Test-Path $ConfigJs)) {
+    Copy-Item "$FxSrc\program\config.js" $ConfigJs
 
-  $UtilsDest = Join-Path $ProfileDir "chrome\utils"
-  New-Item -ItemType Directory -Force -Path $UtilsDest | Out-Null
-  Copy-Item "$FxSrc\profile\chrome\utils\*" $UtilsDest -Recurse -Force
+    $PrefsDir = Join-Path $ZenResources "defaults\pref"
+    New-Item -ItemType Directory -Force -Path $PrefsDir | Out-Null
+    Copy-Item "$FxSrc\program\defaults\pref\config-prefs.js" "$PrefsDir\config-prefs.js"
 
-  Remove-Item $TmpDir -Recurse -Force
-  Success "fx-autoconfig installed."
-}
-
-# ── 4. Copy userscript ───────────────────────────────────────
-
-$JsDir = Join-Path $ProfileDir "chrome\JS"
-New-Item -ItemType Directory -Force -Path $JsDir | Out-Null
-Copy-Item "$ScriptDir\zen-dev-url-detector.uc.js" $JsDir -Force
-Success "Copied userscript to $JsDir"
-
-# ── 5. Append CSS (idempotent) ───────────────────────────────
-
-$ChromeCss = Join-Path $ProfileDir "chrome\userChrome.css"
-$Marker = "/* zen-dev-url */"
-
-$alreadyInstalled = (Test-Path $ChromeCss) -and (Get-Content $ChromeCss -Raw) -match [regex]::Escape($Marker)
-
-if ($alreadyInstalled) {
-  Warn "zen-dev-url styles already present in userChrome.css, skipping append."
+    Success "fx-autoconfig program files installed."
+  } else {
+    Success "fx-autoconfig program files already installed."
+  }
 } else {
-  $cssContent = "`n$Marker`n" + (Get-Content "$ScriptDir\zen-dev-url.css" -Raw)
-  Add-Content -Path $ChromeCss -Value $cssContent -Encoding UTF8
-  Success "Appended styles to $ChromeCss"
+  Success "fx-autoconfig already installed, skipping."
 }
 
-# ── 6. Remind about about:config ─────────────────────────────
+# ── 4. Install to each profile ───────────────────────────────
+
+$Installed = 0
+
+foreach ($ProfileDir in $ProfileDirs) {
+  if ($ProfileDirs.Count -gt 1) {
+    Info "─── $(Split-Path -Leaf $ProfileDir) ───"
+  }
+
+  # fx-autoconfig utils (per-profile, only if we downloaded source)
+  if ($FxSrc) {
+    $UtilsDest = Join-Path $ProfileDir "chrome\utils"
+    New-Item -ItemType Directory -Force -Path $UtilsDest | Out-Null
+    Copy-Item "$FxSrc\profile\chrome\utils\*" $UtilsDest -Recurse -Force
+  }
+
+  # Userscript
+  $JsDir = Join-Path $ProfileDir "chrome\JS"
+  New-Item -ItemType Directory -Force -Path $JsDir | Out-Null
+  Copy-Item "$ScriptDir\zen-dev-url-detector.uc.js" $JsDir -Force
+  Success "Copied userscript to $JsDir"
+
+  # CSS (idempotent)
+  $ChromeCss = Join-Path $ProfileDir "chrome\userChrome.css"
+  $Marker    = "/* zen-dev-url */"
+  $alreadyInstalled = (Test-Path $ChromeCss) -and
+                      (Get-Content $ChromeCss -Raw) -match [regex]::Escape($Marker)
+  if ($alreadyInstalled) {
+    Warn "zen-dev-url styles already present in userChrome.css for $(Split-Path -Leaf $ProfileDir), skipping."
+  } else {
+    $cssContent = "`n$Marker`n" + (Get-Content "$ScriptDir\zen-dev-url.css" -Raw)
+    Add-Content -Path $ChromeCss -Value $cssContent -Encoding UTF8
+    Success "Appended styles to $ChromeCss"
+  }
+
+  $Installed++
+}
+
+if ($Installed -eq 0) { Fail "No profiles were successfully installed to." }
+
+# ── 5. Remind about about:config ─────────────────────────────
 
 Write-Host ""
 Write-Host "┌─────────────────────────────────────────────────────┐" -ForegroundColor Yellow
@@ -141,4 +178,4 @@ Write-Host "│                                                     │" -Foregr
 Write-Host "│  The dev banner will appear on localhost URLs.      │" -ForegroundColor Yellow
 Write-Host "└─────────────────────────────────────────────────────┘" -ForegroundColor Yellow
 Write-Host ""
-Success "Installation complete!"
+Success "Installation complete! ($Installed profile(s) updated)"
