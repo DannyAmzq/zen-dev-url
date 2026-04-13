@@ -249,7 +249,7 @@ Then **fully quit and reopen Zen** (File → Quit, not just close window).
 Open the browser console (`Cmd+Option+J` on Mac, `Ctrl+Shift+J` on Windows) after restart. You should see:
 
 ```
-[zen-dev-url] v20260413-2 loaded   ← styled in orange
+[zen-dev-url] v20260413-3 loaded   ← styled in orange
 [zen-dev-url] self-tests: 16/16 passed
 ```
 
