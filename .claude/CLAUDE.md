@@ -23,15 +23,22 @@ Then fully restart Zen and open the browser console (`Cmd+Option+J` or `Ctrl+Shi
 
 ## Testing on Windows (from WSL)
 
-```bash
-WINUSER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
-ZEN="/mnt/c/Users/$WINUSER/AppData/Roaming/zen"
-PROFILE=$(awk '/^\[Install/{f=1} f && /^Default=/{print substr($0,9); f=0}' "$ZEN/profiles.ini" | tr -d '\r')
-CHROME="$ZEN/$PROFILE/chrome"
+Loops over every installed Zen channel (release/beta/twilight) automatically.
 
-cp zen-dev-url-detector.uc.js "$CHROME/JS/" && echo "JS copied OK" || echo "JS FAILED"
-sed -i '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css"
-{ printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css" && echo "CSS updated OK" || echo "CSS FAILED"
+```bash
+git pull && {
+  WINUSER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
+  ZEN="/mnt/c/Users/$WINUSER/AppData/Roaming/zen"
+  while IFS= read -r PROFILE; do
+    CHROME="$ZEN/$PROFILE/chrome"
+    echo "→ $(basename "$PROFILE")"
+    cp zen-dev-url-detector.uc.js "$CHROME/JS/" && echo "  JS OK" || echo "  JS FAILED"
+    sed -i '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css"
+    { printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css" && echo "  CSS OK" || echo "  CSS FAILED"
+  done < <(awk '/^\[Install/{f=1;next} /^\[/{f=0} f && /^Default=Profiles\//{print substr($0,9)}' \
+    "$ZEN/profiles.ini" | tr -d '\r')
+  echo "Done — restart Zen."
+}
 ```
 
 ## Version verification

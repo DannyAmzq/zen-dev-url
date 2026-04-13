@@ -20,6 +20,8 @@ success() { echo -e "${GREEN}[zen-dev-url]${NC} $1"; }
 warn()    { echo -e "${YELLOW}[zen-dev-url]${NC} $1"; }
 error()   { echo -e "${RED}[zen-dev-url]${NC} $1"; exit 1; }
 
+SCRIPT_DIR="$(dirname "$0")"
+
 # ── 1. Detect OS and Zen paths ───────────────────────────────
 
 IS_FLATPAK=false
@@ -79,48 +81,52 @@ else
   error "Unsupported OS: $OSTYPE. Use install.ps1 on Windows."
 fi
 
-if [[ "$IS_FLATPAK" == "false" ]]; then
-  info "Zen resources: $ZEN_RESOURCES"
+[[ "$IS_FLATPAK" == "false" ]] && info "Zen resources: $ZEN_RESOURCES"
+
+# ── 2. Find all profiles ─────────────────────────────────────
+# Each installed Zen channel (release/beta/twilight) has its own [Install{hash}]
+# section in profiles.ini. Collect all of them so we install to every channel.
+#
+# Reset the flag on any non-Install section header so we don't accidentally
+# pick up the boolean Default=1 that appears in [Profile] sections.
+
+[[ -f "$PROFILES_INI" ]] || error "Could not find profiles.ini at: $PROFILES_INI"
+_ini_base=$(dirname "$PROFILES_INI")
+
+_raw_paths=$(awk \
+  '/^\[Install/{f=1;next} /^\[/{f=0} f && /^Default=Profiles\//{print substr($0,9)}' \
+  "$PROFILES_INI" | tr -d '\r')
+
+# Fallback: [Profile] section marked Default=1
+if [[ -z "$_raw_paths" ]]; then
+  _raw_paths=$(awk '
+    /^\[Profile/ { in_p=1; path=""; is_def=0 }
+    in_p && /^Path=/    { path=substr($0,6) }
+    in_p && /^Default=1/{ is_def=1 }
+    in_p && /^$/        { if (is_def && path!="") { print path; exit } in_p=0 }
+    END                 { if (is_def && path!="") print path }
+  ' "$PROFILES_INI")
 fi
 
-# ── 2. Find the default profile ─────────────────────────────
+[[ -z "$_raw_paths" ]] && error "Could not determine any profiles from profiles.ini."
 
-find_default_profile() {
-  local ini="$1"
-  [[ -f "$ini" ]] || error "Could not find profiles.ini at: $ini"
+mapfile -t PROFILE_DIRS < <(while IFS= read -r p; do
+  [[ -z "$p" ]] && continue
+  [[ "$p" = /* ]] && echo "$p" || echo "$_ini_base/$p"
+done <<< "$_raw_paths")
 
-  local base_dir rel_path
-  base_dir=$(dirname "$ini")
-
-  # Preferred: [Install{hash}] section — tracks the profile Zen actually launched last
-  rel_path=$(awk '/^\[Install/{inst=1} inst && /^Default=/{print substr($0,9); exit}' "$ini")
-
-  # Fallback: profile section marked Default=1
-  if [[ -z "$rel_path" ]]; then
-    rel_path=$(awk '
-      /^\[Profile/ { in_profile=1; path=""; is_default=0 }
-      in_profile && /^Path=/    { path=substr($0,6) }
-      in_profile && /^Default=1/{ is_default=1 }
-      in_profile && /^$/        { if (is_default && path!="") { print path; exit } in_profile=0 }
-      END                       { if (is_default && path!="") print path }
-    ' "$ini")
-  fi
-
-  [[ -z "$rel_path" ]] && error "Could not determine default profile from profiles.ini."
-
-  if [[ "$rel_path" = /* ]]; then
-    echo "$rel_path"
-  else
-    echo "$base_dir/$rel_path"
-  fi
-}
-
-PROFILE_DIR=$(find_default_profile "$PROFILES_INI")
-info "Detected profile: $PROFILE_DIR"
-[[ -d "$PROFILE_DIR" ]] || error "Profile directory not found: $PROFILE_DIR"
-success "Found profile: $PROFILE_DIR"
+if [[ ${#PROFILE_DIRS[@]} -eq 1 ]]; then
+  info "Detected profile: ${PROFILE_DIRS[0]}"
+else
+  info "Detected ${#PROFILE_DIRS[@]} Zen channel profiles — installing to all:"
+  for p in "${PROFILE_DIRS[@]}"; do info "  $p"; done
+fi
 
 # ── 3. Check / install fx-autoconfig ────────────────────────
+# Program files go into the Zen binary directory (once).
+# Utils go into each profile's chrome/utils/ (per-profile loop below).
+
+FX_SRC=""
 
 if [[ "$IS_FLATPAK" == "true" ]]; then
   warn "Flatpak: app bundle is read-only — skipping fx-autoconfig program files."
@@ -132,59 +138,82 @@ else
   CONFIG_JS="$ZEN_RESOURCES/config.js"
   CONFIG_PREFS="$ZEN_RESOURCES/defaults/pref/config-prefs.js"
 
-  if [[ -f "$CONFIG_JS" ]]; then
-    success "fx-autoconfig already installed, skipping."
-  else
-    info "Installing fx-autoconfig..."
+  # Download source if program files are missing OR any profile is missing utils
+  _needs_download=false
+  [[ ! -f "$CONFIG_JS" ]] && _needs_download=true
+  for _pd in "${PROFILE_DIRS[@]}"; do
+    [[ ! -d "$_pd/chrome/utils" ]] && _needs_download=true && break
+  done
 
+  if [[ "$_needs_download" == "true" ]]; then
+    info "Downloading fx-autoconfig..."
     TMP_DIR=$(mktemp -d)
     trap 'rm -rf "$TMP_DIR"' EXIT
-
     curl -fsSL https://github.com/MrOtherGuy/fx-autoconfig/archive/refs/heads/master.zip \
       -o "$TMP_DIR/fx-autoconfig.zip"
     unzip -q "$TMP_DIR/fx-autoconfig.zip" -d "$TMP_DIR"
+    FX_SRC="$TMP_DIR/fx-autoconfig-master"
 
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-      sudo cp "$TMP_DIR/fx-autoconfig-master/program/config.js" "$CONFIG_JS"
-      sudo mkdir -p "$ZEN_RESOURCES/defaults/pref"
-      sudo cp "$TMP_DIR/fx-autoconfig-master/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
+    if [[ ! -f "$CONFIG_JS" ]]; then
+      if [[ "$OSTYPE" == "darwin"* ]]; then
+        sudo cp "$FX_SRC/program/config.js" "$CONFIG_JS"
+        sudo mkdir -p "$ZEN_RESOURCES/defaults/pref"
+        sudo cp "$FX_SRC/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
+      else
+        cp "$FX_SRC/program/config.js" "$CONFIG_JS"
+        mkdir -p "$ZEN_RESOURCES/defaults/pref"
+        cp "$FX_SRC/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
+      fi
+      success "fx-autoconfig program files installed."
     else
-      cp "$TMP_DIR/fx-autoconfig-master/program/config.js" "$CONFIG_JS"
-      mkdir -p "$ZEN_RESOURCES/defaults/pref"
-      cp "$TMP_DIR/fx-autoconfig-master/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
+      success "fx-autoconfig program files already installed."
     fi
-
-    CHROME_UTILS="$PROFILE_DIR/chrome/utils"
-    mkdir -p "$CHROME_UTILS"
-    cp -r "$TMP_DIR/fx-autoconfig-master/profile/chrome/utils/." "$CHROME_UTILS/"
-    success "fx-autoconfig installed."
+  else
+    success "fx-autoconfig already installed, skipping."
   fi
 fi
 
-# ── 4. Copy userscript ──────────────────────────────────────
+# ── 4. Install to each profile ───────────────────────────────
 
-JS_DIR="$PROFILE_DIR/chrome/JS"
-mkdir -p "$JS_DIR"
-cp "$(dirname "$0")/zen-dev-url-detector.uc.js" "$JS_DIR/"
-success "Copied userscript to $JS_DIR"
+INSTALLED=0
 
-# ── 5. Append CSS (idempotent) ──────────────────────────────
+for PROFILE_DIR in "${PROFILE_DIRS[@]}"; do
+  if [[ ! -d "$PROFILE_DIR" ]]; then
+    warn "Profile directory not found, skipping: $PROFILE_DIR"
+    continue
+  fi
 
-CHROME_CSS="$PROFILE_DIR/chrome/userChrome.css"
-MARKER="/* zen-dev-url */"
+  [[ ${#PROFILE_DIRS[@]} -gt 1 ]] && info "─── $(basename "$PROFILE_DIR") ───"
 
-if grep -qF "$MARKER" "$CHROME_CSS" 2>/dev/null; then
-  warn "zen-dev-url styles already present in userChrome.css, skipping append."
-else
-  {
-    echo ""
-    echo "$MARKER"
-    cat "$(dirname "$0")/zen-dev-url.css"
-  } >> "$CHROME_CSS"
-  success "Appended styles to $CHROME_CSS"
-fi
+  # fx-autoconfig utils (per-profile, only if we downloaded source)
+  if [[ "$IS_FLATPAK" == "false" && -n "$FX_SRC" ]]; then
+    CHROME_UTILS="$PROFILE_DIR/chrome/utils"
+    mkdir -p "$CHROME_UTILS"
+    cp -r "$FX_SRC/profile/chrome/utils/." "$CHROME_UTILS/"
+  fi
 
-# ── 6. Remind about about:config ────────────────────────────
+  # Userscript
+  JS_DIR="$PROFILE_DIR/chrome/JS"
+  mkdir -p "$JS_DIR"
+  cp "$SCRIPT_DIR/zen-dev-url-detector.uc.js" "$JS_DIR/"
+  success "Copied userscript to $JS_DIR"
+
+  # CSS (idempotent)
+  CHROME_CSS="$PROFILE_DIR/chrome/userChrome.css"
+  MARKER="/* zen-dev-url */"
+  if grep -qF "$MARKER" "$CHROME_CSS" 2>/dev/null; then
+    warn "zen-dev-url styles already present in userChrome.css, skipping append."
+  else
+    { echo ""; echo "$MARKER"; cat "$SCRIPT_DIR/zen-dev-url.css"; } >> "$CHROME_CSS"
+    success "Appended styles to $CHROME_CSS"
+  fi
+
+  INSTALLED=$((INSTALLED + 1))
+done
+
+[[ $INSTALLED -eq 0 ]] && error "No profiles were successfully installed to."
+
+# ── 5. Remind about about:config ────────────────────────────
 
 echo ""
 echo -e "${YELLOW}┌─────────────────────────────────────────────────────┐${NC}"
@@ -199,4 +228,4 @@ echo -e "${YELLOW}│                                                     │${N
 echo -e "${YELLOW}│  The dev banner will appear on localhost URLs.      │${NC}"
 echo -e "${YELLOW}└─────────────────────────────────────────────────────┘${NC}"
 echo ""
-success "Installation complete!"
+success "Installation complete! ($INSTALLED profile(s) updated)"
