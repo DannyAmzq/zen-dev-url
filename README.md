@@ -70,6 +70,8 @@ All settings are saved to `about:config` prefs and survive restarts.
 
 `Alt+Shift+D` — toggle dev mode on/off from anywhere.
 
+The forced state is tied to the browser element (tab), so it **persists across navigations in the same tab** — if you force dev mode on while visiting `example.com` and then navigate to `other.com`, the banner stays on. Press `Alt+Shift+D` again or close the tab to clear it.
+
 ### Detected URLs (defaults)
 
 | Pattern | Example |
@@ -249,8 +251,7 @@ Then **fully quit and reopen Zen** (File → Quit, not just close window).
 Open the browser console (`Cmd+Option+J` on Mac, `Ctrl+Shift+J` on Windows) after restart. You should see:
 
 ```
-[zen-dev-url] v20260413-3 loaded   ← styled in orange
-[zen-dev-url] self-tests: 16/16 passed
+[zen-dev-url] v20260414-1 loaded   ← styled in orange
 ```
 
 Then navigate to `http://localhost` — the banner should appear.
@@ -341,6 +342,7 @@ All preferences are under `zen.urlbar.*`. You can tweak them directly in `about:
 | `zen.urlbar.dev-indicator.custom-patterns` | `""` | Comma-separated glob host patterns |
 | `zen.urlbar.dev-indicator.auto-open-devtools` | `false` | Auto-open DevTools on every dev URL navigation |
 | `zen.urlbar.dev-indicator.auto-open-panel` | `"webconsole"` | Which panel auto-open uses (`webconsole` / `netmonitor` / `inspector`) |
+| `zen.urlbar.dev-indicator.self-tests` | `false` | Run logic self-tests on window open and print results to the console (for contributors) |
 
 **Firefox prefs** (not owned by this mod — the settings panel just toggles them so your changes survive restart):
 
