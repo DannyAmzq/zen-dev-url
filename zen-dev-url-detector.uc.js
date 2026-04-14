@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260414-1';
+  const ZEN_DEV_URL_VERSION = '20260414-4';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -198,19 +198,34 @@
           field.setAttribute('contenteditable', 'true');
         }
       });
-      // Text-editing keys (arrows, Home/End, Backspace/Delete, etc.) must not
-      // escape to window-level Zen keybindings — the URL bar and toolbar have
-      // chrome bindings on arrow keys that steal focus while we're editing.
-      // Run in mozSystemGroup capture phase so we fire before Zen's handlers.
-      field.addEventListener('keydown', (e) => {
-        if (field.getAttribute('contenteditable') !== 'true') return;
-        // Let Enter and Escape bubble to the outer handler below; everything
-        // else is text-editing — stop it from reaching chrome keybindings.
-        if (e.key === 'Enter' || e.key === 'Escape') return;
-        // Preserve regular browser shortcuts (Ctrl/Cmd-C/V/A/Z etc.).
-        if (e.ctrlKey || e.metaKey) return;
-        e.stopPropagation();
-      }, { capture: true, mozSystemGroup: true });
+      // Arrow / Home / End keys on the editable field leak to Firefox's
+       // toolbar-keynav (focusout chain shows `toolbartabstop` before urlbar
+       // steals focus). Chrome sys-capture listeners run before ours and
+       // stopImmediatePropagation there doesn't help — we never get called.
+       // Fix: in capture phase on the field itself, do the caret move by hand
+       // via Selection.modify(), then preventDefault + stopImmediatePropagation
+       // so no chrome layer ever sees the arrow.
+       const NAV = {
+         ArrowLeft:  ['backward', 'character'],
+         ArrowRight: ['forward',  'character'],
+         ArrowUp:    ['backward', 'lineboundary'],
+         ArrowDown:  ['forward',  'lineboundary'],
+         Home:       ['backward', 'lineboundary'],
+         End:        ['forward',  'lineboundary'],
+       };
+       field.addEventListener('keydown', (e) => {
+         if (field.getAttribute('contenteditable') !== 'true') return;
+         const spec = NAV[e.key];
+         if (!spec) return;
+         if (e.ctrlKey || e.metaKey) return;   // preserve Ctrl/Cmd-Home/End etc.
+         const sel = window.getSelection();
+         if (sel && sel.rangeCount && field.contains(sel.anchorNode)) {
+           try { sel.modify(e.shiftKey ? 'extend' : 'move', spec[0], spec[1]); }
+           catch (err) { console.error('[zen-dev-url] sel.modify failed:', err); }
+         }
+         e.preventDefault();
+         e.stopImmediatePropagation();
+       }, { capture: true });
 
       field.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -388,7 +403,12 @@
       const settingsBtn = makeBtn('zen-dev-url-settings', 'Settings', () => detector._openSettings());
       banner.appendChild(settingsBtn);
 
-      document.documentElement.appendChild(banner);
+      // Append inside #browser, not documentElement. #browser creates a
+       // stacking context (position:relative; z-index:1) and contains
+       // #navigator-toolbox — putting the banner here lets the floating
+       // compact-mode sidebar slide OVER the banner on hover instead of
+       // being clipped underneath. Fallback to documentElement pre-layout.
+       (document.getElementById('browser') || document.documentElement).appendChild(banner);
       this._banner = banner;
       this._field = field;
       this._viewportEl = viewportEl;
@@ -800,30 +820,51 @@
       // ── Actions ───────────────────────────────────────────────
       panel.appendChild(this._makePanelDivider());
       panel.appendChild(this._makeSectionHeader('Actions'));
-      panel.appendChild(this._makeActionRow('Open in private window', () => {
-        const url = gBrowser.currentURI.spec;
-        const win = OpenBrowserWindow({ private: true });
-        win.addEventListener('load', () => {
-          // Defer one tick so all chrome init finishes before we navigate.
-          // fixupAndLoadURIString lives on gBrowser (the tabbrowser), NOT on
-          // selectedBrowser (the <browser> element).
-          win.setTimeout(() => {
-            try {
-              win.gBrowser.fixupAndLoadURIString(url, {
-                triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
-              });
-            } catch (e1) {
-              // Fallback: URLBar (always present, works in all Zen builds)
+      const sysPrincipal = () => Services.scriptSecurityManager.getSystemPrincipal();
+      const ACTIONS = [
+        ['Open in new tab', () => {
+          const url = gBrowser.currentURI.spec;
+          const tab = gBrowser.addTab(url, { triggeringPrincipal: sysPrincipal() });
+          gBrowser.selectedTab = tab;
+        }],
+        ['Open in private window', () => {
+          const url = gBrowser.currentURI.spec;
+          const win = OpenBrowserWindow({ private: true });
+          win.addEventListener('load', () => {
+            // Defer one tick so all chrome init finishes before we navigate.
+            // fixupAndLoadURIString lives on gBrowser (the tabbrowser), NOT on
+            // selectedBrowser (the <browser> element).
+            win.setTimeout(() => {
               try {
-                win.gURLBar.value = url;
-                win.gURLBar.handleCommand();
-              } catch (e2) {
-                console.error('[zen-dev-url] private win: all nav methods failed:', e2.message);
+                win.gBrowser.fixupAndLoadURIString(url, {
+                  triggeringPrincipal: sysPrincipal(),
+                });
+              } catch (e1) {
+                try {
+                  win.gURLBar.value = url;
+                  win.gURLBar.handleCommand();
+                } catch (e2) {
+                  console.error('[zen-dev-url] private win: all nav methods failed:', e2.message);
+                }
               }
-            }
-          }, 0);
-        }, { once: true });
-      }));
+            }, 0);
+          }, { once: true });
+        }],
+        ['View page source', () => {
+          const url = 'view-source:' + gBrowser.currentURI.spec;
+          const tab = gBrowser.addTab(url, { triggeringPrincipal: sysPrincipal() });
+          gBrowser.selectedTab = tab;
+        }],
+        ['Copy as curl', () => {
+          const url = gBrowser.currentURI.spec;
+          navigator.clipboard.writeText(`curl '${url.replace(/'/g, `'\\''`)}'`)
+            .then(() => this._showToast('◉  Copied curl'))
+            .catch(err => console.error('[zen-dev-url] clipboard write failed:', err));
+        }],
+      ];
+      for (const [label, onClick] of ACTIONS) {
+        panel.appendChild(this._makeActionRow(label, onClick));
+      }
 
       document.documentElement.appendChild(panel);
       this._settingsPanel = panel;
