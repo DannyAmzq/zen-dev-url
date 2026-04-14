@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260413-3';
+  const ZEN_DEV_URL_VERSION = '20260414-1';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -50,8 +50,48 @@
     /** Tabs manually suppressed from dev mode (overrides URL match) */
     _excludedBrowsers: new WeakSet(),
 
-    get _enabled() {
-      return Services.prefs.getBoolPref(this.PREF, true);
+    /**
+     * Cached pref values. Populated by _readPrefs() at init() and refreshed
+     * on every observed pref change. Reading prefs synchronously on every
+     * navigation/tab-switch is wasteful; the observer already fires on any
+     * change, so a single read pass on each change is enough.
+     */
+    _prefs: null,
+
+    /**
+     * Reads (or re-reads) all observed prefs into this._prefs.
+     * Call once in init() then again inside observe() on any pref change.
+     */
+    _readPrefs() {
+      const sp = Services.prefs;
+      const rawPorts    = sp.getStringPref('zen.urlbar.dev-indicator.custom-ports', '');
+      const rawPatterns = sp.getStringPref('zen.urlbar.dev-indicator.custom-patterns', '');
+
+      // Pre-parse ports into a Set for O(1) lookup in _isDevUri
+      const portSet = new Set(
+        rawPorts.split(',').map(p => p.trim()).filter(Boolean)
+      );
+
+      // Pre-compile host patterns; bad patterns are skipped silently
+      const patternRes = [];
+      for (const pat of rawPatterns.split(',').map(p => p.trim()).filter(Boolean)) {
+        try {
+          patternRes.push(new RegExp(
+            '^' + pat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$'
+          ));
+        } catch { /* invalid glob — skip */ }
+      }
+
+      this._prefs = {
+        enabled:          sp.getBoolPref(this.PREF, true),
+        includeFileUrls:  sp.getBoolPref('zen.urlbar.dev-indicator.include-file-urls', false),
+        includeZeroHost:  sp.getBoolPref('zen.urlbar.dev-indicator.include-zero-host', true),
+        includeLocalTLDs: sp.getBoolPref('zen.urlbar.dev-indicator.include-local-tlds', true),
+        portSet,
+        patternRes,
+        autoOpenDevtools: sp.getBoolPref('zen.urlbar.dev-indicator.auto-open-devtools', false),
+        autoOpenPanel:    sp.getStringPref('zen.urlbar.dev-indicator.auto-open-panel', 'webconsole'),
+      };
     },
 
     /**
@@ -59,18 +99,33 @@
      * the dev banner DOM element.
      */
     init() {
+      // Populate pref cache before any _update() / _isDevUri() calls
+      this._readPrefs();
       this._createBanner();
       // Listen for navigation in any tab
       gBrowser.addTabsProgressListener(this._progressListener);
       // Listen for tab switches
       window.addEventListener('TabSelect', this);
-      // Listen for pref changes
-      Services.prefs.addObserver(this.PREF, this);
-      Services.prefs.addObserver('zen.urlbar.dev-indicator.include-zero-host', this);
-      Services.prefs.addObserver('zen.urlbar.dev-indicator.include-local-tlds', this);
-      Services.prefs.addObserver('zen.urlbar.dev-indicator.include-file-urls', this);
-      Services.prefs.addObserver('zen.urlbar.dev-indicator.custom-ports', this);
-      Services.prefs.addObserver('zen.urlbar.dev-indicator.custom-patterns', this);
+      // Listen for pref changes — _readPrefs() + _update() run on each change
+      for (const key of [
+        this.PREF,
+        'zen.urlbar.dev-indicator.include-zero-host',
+        'zen.urlbar.dev-indicator.include-local-tlds',
+        'zen.urlbar.dev-indicator.include-file-urls',
+        'zen.urlbar.dev-indicator.custom-ports',
+        'zen.urlbar.dev-indicator.custom-patterns',
+        'zen.urlbar.dev-indicator.auto-open-devtools',
+        'zen.urlbar.dev-indicator.auto-open-panel',
+      ]) {
+        Services.prefs.addObserver(key, this);
+      }
+      // Top-level error handler: tag any uncaught error from our script so bug
+      // reports include a recognisable prefix rather than a bare stack trace.
+      window.addEventListener('error', (e) => {
+        if (e.filename?.includes('zen-dev-url-detector.uc.js')) {
+          console.error('[zen-dev-url] FATAL:', e.message, 'at', `${e.filename}:${e.lineno}`);
+        }
+      }, true);
       // Alt+Shift+D toggles dev mode for the current tab.
       // Works on any URL — forced-on overrides URL checks, forced-off suppresses
       // the banner even on dev URLs. mozSystemGroup: true fires before web content.
@@ -78,7 +133,7 @@
         if (e.altKey && e.shiftKey && e.key === 'D') {
           // Respect the master off switch BEFORE eating the event — otherwise
           // a disabled mod still swallows the user's Alt+Shift+D.
-          if (!this._enabled) return;
+          if (!this._prefs.enabled) return;
           e.preventDefault();
           e.stopImmediatePropagation();
           const browser = gBrowser.selectedBrowser;
@@ -340,21 +395,28 @@
       this._showDisplay = showDisplay;
       this._repositionBanner();
       this._createSettingsPanel();
-      // Re-align banner and refresh viewport on window resize.
-      window.addEventListener('resize', () => {
-        this._repositionBanner();
-        this._updateViewport();
-      });
+      // Re-align banner and refresh viewport on resize.
+      // Both window resize and ResizeObserver can fire many times per second
+      // during a window-drag or sidebar-splitter drag — gate through a single
+      // RAF so at most one reposition runs per frame.
+      let rafPending = false;
+      const onResize = () => {
+        if (rafPending) return;
+        rafPending = true;
+        requestAnimationFrame(() => {
+          rafPending = false;
+          this._repositionBanner();
+          this._updateViewport();
+        });
+      };
+      window.addEventListener('resize', onResize);
       // Window resize doesn't fire when only the sidebar width changes (e.g.
       // user toggles the sidebar or drags the splitter) — observe the content
       // panel directly so the banner follows its left edge and width.
       try {
         const tabpanels = document.getElementById('tabbrowser-tabpanels');
         if (tabpanels && typeof ResizeObserver === 'function') {
-          this._tabpanelsObserver = new ResizeObserver(() => {
-            this._repositionBanner();
-            this._updateViewport();
-          });
+          this._tabpanelsObserver = new ResizeObserver(onResize);
           this._tabpanelsObserver.observe(tabpanels);
         }
       } catch (e) {
@@ -388,8 +450,8 @@
       if (br) this._viewportEl.textContent = `${Math.round(br.width)} × ${Math.round(br.height)}`;
     },
 
-    /** Called when the zen.urlbar.show-dev-indicator pref changes */
-    observe() { this._update(); },
+    /** Called when any observed pref changes — refresh cache then re-evaluate */
+    observe() { this._readPrefs(); this._update(); },
 
     /** Called on TabSelect events */
     handleEvent() { this._update(); },
@@ -400,42 +462,20 @@
      * @returns {boolean}
      */
     _isDevUri(uri) {
-      if (!uri) return false;
+      if (!uri || !this._prefs) return false;
       try {
         const { scheme } = uri;
-        if (scheme === 'file') {
-          return Services.prefs.getBoolPref('zen.urlbar.dev-indicator.include-file-urls', false);
-        }
+        if (scheme === 'file') return this._prefs.includeFileUrls;
         if (scheme !== 'http' && scheme !== 'https') return false;
         const host = uri.host ?? '';
         if (this._devHosts.has(host)) return true;
-        if (host === '0.0.0.0' &&
-            Services.prefs.getBoolPref('zen.urlbar.dev-indicator.include-zero-host', true))
-          return true;
-        if (Services.prefs.getBoolPref('zen.urlbar.dev-indicator.include-local-tlds', true) &&
-            this._devTLDs.some(tld => host.endsWith(tld)))
-          return true;
-        // Custom ports — any host on a listed port is treated as dev
-        const customPorts = Services.prefs.getStringPref('zen.urlbar.dev-indicator.custom-ports', '');
-        if (customPorts && uri.port > 0) {
-          const ports = customPorts.split(',').map(p => p.trim()).filter(Boolean);
-          if (ports.includes(String(uri.port))) return true;
-        }
-        // Custom host patterns — simple glob (* = any chars, ? = one char).
-        // Individual bad patterns must not break detection for the others, so
-        // each regex compile/test is isolated.
-        const customPatterns = Services.prefs.getStringPref('zen.urlbar.dev-indicator.custom-patterns', '');
-        if (customPatterns) {
-          const patterns = customPatterns.split(',').map(p => p.trim()).filter(Boolean);
-          for (const pat of patterns) {
-            try {
-              const re = new RegExp(
-                '^' + pat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$'
-              );
-              if (re.test(host)) return true;
-            } catch { /* invalid pattern — skip silently */ }
-          }
-        }
+        if (host === '0.0.0.0' && this._prefs.includeZeroHost) return true;
+        if (this._prefs.includeLocalTLDs && this._devTLDs.some(tld => host.endsWith(tld))) return true;
+        // Custom ports — pre-parsed Set, O(1) lookup
+        if (this._prefs.portSet.size > 0 && uri.port > 0 &&
+            this._prefs.portSet.has(String(uri.port))) return true;
+        // Custom host patterns — pre-compiled RegExps from _readPrefs()
+        if (this._prefs.patternRes.some(re => re.test(host))) return true;
         return false;
       } catch { return false; }
     },
@@ -450,7 +490,7 @@
       const browser = gBrowser.selectedBrowser;
       const forced = this._forcedBrowsers.has(browser);
       const excluded = this._excludedBrowsers.has(browser);
-      const isDev = this._enabled && ((this._isDevUri(currentUri) && !excluded) || forced);
+      const isDev = this._prefs?.enabled && ((this._isDevUri(currentUri) && !excluded) || forced);
       document.documentElement.toggleAttribute('zen-dev-url', isDev);
       if (isDev && currentUri) {
         if (this._field && this._field.getAttribute('contenteditable') === 'false') {
@@ -458,13 +498,12 @@
         }
         this._updateViewport();
         // Auto-open DevTools panel if setting is on and panel not already open
-        if (Services.prefs.getBoolPref('zen.urlbar.dev-indicator.auto-open-devtools', false)) {
+        if (this._prefs.autoOpenDevtools) {
           try {
             const { DevToolsShim } = ChromeUtils.importESModule('chrome://devtools-startup/content/DevToolsShim.sys.mjs');
             const toolbox = DevToolsShim.getToolboxForTab(gBrowser.selectedTab);
             if (!toolbox || toolbox._destroyer) {
-              const toolId = Services.prefs.getStringPref('zen.urlbar.dev-indicator.auto-open-panel', 'webconsole');
-              DevToolsShim.showToolboxForTab(gBrowser.selectedTab, { toolId });
+              DevToolsShim.showToolboxForTab(gBrowser.selectedTab, { toolId: this._prefs.autoOpenPanel });
             }
           } catch { /* DevTools unavailable */ }
         }
@@ -883,9 +922,9 @@
   window.__zenDevUrlDetector = detector;
 
   // ── Self-tests ────────────────────────────────────────────────────────────
-  // Tests for pure logic that doesn't need browser APIs.
-  // Failures are logged as errors and are visible in the browser console.
-  (function runSelfTests() {
+  // Off by default to keep the user's console quiet.
+  // Contributors: flip zen.urlbar.dev-indicator.self-tests = true in about:config.
+  if (Services.prefs.getBoolPref('zen.urlbar.dev-indicator.self-tests', false)) (function runSelfTests() {
     let pass = 0, fail = 0;
 
     function assert(description, actual, expected) {
@@ -946,9 +985,10 @@
     // contain the bare form or the match silently fails for http://[::1]/ URLs.
     assert('IPv6 localhost (::1) is in _devHosts', detector._devHosts.has('::1'), true);
 
+    const total = pass + fail;
     const status = fail === 0
-      ? `%c[zen-dev-url] self-tests: ${pass}/${pass} passed`
-      : `%c[zen-dev-url] self-tests: ${fail} FAILED, ${pass} passed`;
+      ? `%c[zen-dev-url] self-tests: ${pass}/${total} passed`
+      : `%c[zen-dev-url] self-tests: ${fail} FAILED, ${pass}/${total} passed`;
     const style = fail === 0 ? 'color:#90ee90;font-weight:bold' : 'color:#ff4444;font-weight:bold';
     console.log(status, style);
   })();
