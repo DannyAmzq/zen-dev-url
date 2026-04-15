@@ -20,6 +20,13 @@ success() { echo -e "${GREEN}[zen-dev-url]${NC} $1"; }
 warn()    { echo -e "${YELLOW}[zen-dev-url]${NC} $1"; }
 error()   { echo -e "${RED}[zen-dev-url]${NC} $1"; exit 1; }
 
+# ── 0. Check required commands ─────────────────────────────────
+for cmd in curl unzip; do
+  if ! command -v "$cmd" &> /dev/null; then
+    error "Required command '$cmd' not found. Please install $cmd and try again."
+  fi
+done
+
 # ── 1. Detect OS and Zen paths ───────────────────────────────
 
 IS_FLATPAK=false
