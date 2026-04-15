@@ -123,10 +123,17 @@ else
 fi
 
 # ── 3. Check / install fx-autoconfig ────────────────────────
+# fx-autoconfig is vendored in vendor/fx-autoconfig/ — no network fetch
+# or curl/unzip dependency needed. See vendor/fx-autoconfig/README.md.
+#
 # Program files go into the Zen binary directory (once).
 # Utils go into each profile's chrome/utils/ (per-profile loop below).
 
-FX_SRC=""
+FX_SRC="$SCRIPT_DIR/vendor/fx-autoconfig"
+
+if [[ ! -d "$FX_SRC/profile/chrome/utils" ]]; then
+  error "Vendored fx-autoconfig not found at $FX_SRC — did you clone the repo with its full tree?"
+fi
 
 if [[ "$IS_FLATPAK" == "true" ]]; then
   warn "Flatpak: app bundle is read-only — skipping fx-autoconfig program files."
@@ -138,38 +145,19 @@ else
   CONFIG_JS="$ZEN_RESOURCES/config.js"
   CONFIG_PREFS="$ZEN_RESOURCES/defaults/pref/config-prefs.js"
 
-  # Download source if program files are missing OR any profile is missing utils
-  _needs_download=false
-  [[ ! -f "$CONFIG_JS" ]] && _needs_download=true
-  for _pd in "${PROFILE_DIRS[@]}"; do
-    [[ ! -d "$_pd/chrome/utils" ]] && _needs_download=true && break
-  done
-
-  if [[ "$_needs_download" == "true" ]]; then
-    info "Downloading fx-autoconfig..."
-    TMP_DIR=$(mktemp -d)
-    trap 'rm -rf "$TMP_DIR"' EXIT
-    curl -fsSL https://github.com/MrOtherGuy/fx-autoconfig/archive/refs/heads/master.zip \
-      -o "$TMP_DIR/fx-autoconfig.zip"
-    unzip -q "$TMP_DIR/fx-autoconfig.zip" -d "$TMP_DIR"
-    FX_SRC="$TMP_DIR/fx-autoconfig-master"
-
-    if [[ ! -f "$CONFIG_JS" ]]; then
-      if [[ "$OSTYPE" == "darwin"* ]]; then
-        sudo cp "$FX_SRC/program/config.js" "$CONFIG_JS"
-        sudo mkdir -p "$ZEN_RESOURCES/defaults/pref"
-        sudo cp "$FX_SRC/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
-      else
-        cp "$FX_SRC/program/config.js" "$CONFIG_JS"
-        mkdir -p "$ZEN_RESOURCES/defaults/pref"
-        cp "$FX_SRC/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
-      fi
-      success "fx-autoconfig program files installed."
+  if [[ ! -f "$CONFIG_JS" ]]; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      sudo cp "$FX_SRC/program/config.js" "$CONFIG_JS"
+      sudo mkdir -p "$ZEN_RESOURCES/defaults/pref"
+      sudo cp "$FX_SRC/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
     else
-      success "fx-autoconfig program files already installed."
+      cp "$FX_SRC/program/config.js" "$CONFIG_JS"
+      mkdir -p "$ZEN_RESOURCES/defaults/pref"
+      cp "$FX_SRC/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
     fi
+    success "fx-autoconfig program files installed (from vendored copy)."
   else
-    success "fx-autoconfig already installed, skipping."
+    success "fx-autoconfig program files already installed."
   fi
 fi
 

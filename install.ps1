@@ -86,44 +86,29 @@ if ($ProfileDirs.Count -eq 1) {
 }
 
 # ── 3. Check / install fx-autoconfig ─────────────────────────
+# fx-autoconfig is vendored in vendor\fx-autoconfig\ — no network fetch
+# or Expand-Archive dependency needed. See vendor\fx-autoconfig\README.md.
+#
 # Program files go into the Zen binary directory (once).
 # Utils go into each profile's chrome\utils\ (per-profile loop below).
 
+$FxSrc = Join-Path $ScriptDir "vendor\fx-autoconfig"
+if (-not (Test-Path (Join-Path $FxSrc "profile\chrome\utils"))) {
+  Fail "Vendored fx-autoconfig not found at $FxSrc — did you clone the repo with its full tree?"
+}
+
 $ConfigJs = Join-Path $ZenResources "config.js"
-$FxSrc    = $null
 
-# Download source if program files are missing OR any profile is missing utils
-$needsDownload = (-not (Test-Path $ConfigJs)) -or
-                 ($ProfileDirs | Where-Object { -not (Test-Path (Join-Path $_ "chrome\utils")) }).Count -gt 0
+if (-not (Test-Path $ConfigJs)) {
+  Copy-Item (Join-Path $FxSrc "program\config.js") $ConfigJs
 
-$TmpDir = $null
-if ($needsDownload) {
-  Info "Downloading fx-autoconfig..."
+  $PrefsDir = Join-Path $ZenResources "defaults\pref"
+  New-Item -ItemType Directory -Force -Path $PrefsDir | Out-Null
+  Copy-Item (Join-Path $FxSrc "program\defaults\pref\config-prefs.js") "$PrefsDir\config-prefs.js"
 
-  $TmpDir  = Join-Path $env:TEMP "fx-autoconfig-install"
-  # Clean any leftovers from a previous run so Expand-Archive doesn't see stale files
-  if (Test-Path $TmpDir) { Remove-Item $TmpDir -Recurse -Force }
-  New-Item -ItemType Directory -Force -Path $TmpDir | Out-Null
-
-  $ZipPath = Join-Path $TmpDir "fx-autoconfig.zip"
-  Invoke-WebRequest -Uri "https://github.com/MrOtherGuy/fx-autoconfig/archive/refs/heads/master.zip" `
-    -OutFile $ZipPath
-  Expand-Archive -Path $ZipPath -DestinationPath $TmpDir -Force
-  $FxSrc = Join-Path $TmpDir "fx-autoconfig-master"
-
-  if (-not (Test-Path $ConfigJs)) {
-    Copy-Item "$FxSrc\program\config.js" $ConfigJs
-
-    $PrefsDir = Join-Path $ZenResources "defaults\pref"
-    New-Item -ItemType Directory -Force -Path $PrefsDir | Out-Null
-    Copy-Item "$FxSrc\program\defaults\pref\config-prefs.js" "$PrefsDir\config-prefs.js"
-
-    Success "fx-autoconfig program files installed."
-  } else {
-    Success "fx-autoconfig program files already installed."
-  }
+  Success "fx-autoconfig program files installed (from vendored copy)."
 } else {
-  Success "fx-autoconfig already installed, skipping."
+  Success "fx-autoconfig program files already installed."
 }
 
 # ── 4. Install to each profile ───────────────────────────────
@@ -135,12 +120,10 @@ foreach ($ProfileDir in $ProfileDirs) {
     Info "─── $(Split-Path -Leaf $ProfileDir) ───"
   }
 
-  # fx-autoconfig utils (per-profile, only if we downloaded source)
-  if ($FxSrc) {
-    $UtilsDest = Join-Path $ProfileDir "chrome\utils"
-    New-Item -ItemType Directory -Force -Path $UtilsDest | Out-Null
-    Copy-Item "$FxSrc\profile\chrome\utils\*" $UtilsDest -Recurse -Force
-  }
+  # fx-autoconfig utils (per-profile, from vendored copy)
+  $UtilsDest = Join-Path $ProfileDir "chrome\utils"
+  New-Item -ItemType Directory -Force -Path $UtilsDest | Out-Null
+  Copy-Item "$FxSrc\profile\chrome\utils\*" $UtilsDest -Recurse -Force
 
   # Userscript
   $JsDir = Join-Path $ProfileDir "chrome\JS"
@@ -165,9 +148,6 @@ foreach ($ProfileDir in $ProfileDirs) {
 }
 
 if ($Installed -eq 0) { Fail "No profiles were successfully installed to." }
-
-# Clean up the fx-autoconfig download dir
-if ($TmpDir -and (Test-Path $TmpDir)) { Remove-Item $TmpDir -Recurse -Force }
 
 # ── 5. Remind about about:config ─────────────────────────────
 
