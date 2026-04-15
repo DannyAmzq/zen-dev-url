@@ -203,25 +203,19 @@ sudo bash install.sh
 
 ### Windows — WSL (Ubuntu)
 
-Open a WSL terminal inside this repo's directory. The snippet loops over every installed Zen channel (release/beta/twilight) it finds in `profiles.ini`, so multi-channel users don't have to target one by hand.
+Open a WSL terminal inside this repo's directory:
 
 ```bash
-WINUSER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
-ZEN="/mnt/c/Users/$WINUSER/AppData/Roaming/zen"
-
-while IFS= read -r PROFILE; do
-  CHROME="$ZEN/$PROFILE/chrome"
-  echo "→ $(basename "$PROFILE")"
-  cp zen-dev-url-detector.uc.js "$CHROME/JS/" && echo "  JS OK" || echo "  JS FAILED"
-  sed -i '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css"
-  { printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css" && echo "  CSS OK" || echo "  CSS FAILED"
-done < <(awk '/^\[Install/{f=1;next} /^\[/{f=0} f && /^Default=Profiles\//{print substr($0,9)}' \
-  "$ZEN/profiles.ini" | tr -d '\r')
+bash install.sh
 ```
 
-Then **fully quit and reopen Zen** (File → Quit, not just close window).
+`install.sh` detects WSL automatically (via `/proc/version`), resolves your Windows username through `cmd.exe`, and targets the Zen install on the Windows side at `%APPDATA%\zen`. It also installs fx-autoconfig's program files into `%PROGRAMFILES%\Zen Browser\` (or `%LOCALAPPDATA%\zen\`) — the same files `install.ps1` handles for native PowerShell.
 
-> **Tip:** this same snippet doubles as your update command — run it any time you pull new changes and restart Zen.
+Multi-channel users don't need to do anything extra — the installer iterates every `Install{hash}` section in `profiles.ini` and installs to all detected channels (release/beta/twilight).
+
+> **Note:** if Zen is installed under `%PROGRAMFILES%\Zen Browser\`, the installer may need Windows Administrator to write `config.js` there. If the check fails it will tell you to either re-launch WSL elevated, or just use `install.ps1` on the PowerShell side instead.
+
+Then **fully quit and reopen Zen** (File → Quit, not just close window).
 
 ---
 
@@ -260,21 +254,10 @@ git pull && bash install.sh
 
 ### WSL
 ```bash
-git pull && {
-  WINUSER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
-  ZEN="/mnt/c/Users/$WINUSER/AppData/Roaming/zen"
-  while IFS= read -r PROFILE; do
-    CHROME="$ZEN/$PROFILE/chrome"
-    echo "→ $(basename "$PROFILE")"
-    cp zen-dev-url-detector.uc.js "$CHROME/JS/" && echo "  JS OK" || echo "  JS FAILED"
-    sed -i '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css"
-    { printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css" && echo "  CSS OK" || echo "  CSS FAILED"
-  done < <(awk '/^\[Install/{f=1;next} /^\[/{f=0} f && /^Default=Profiles\//{print substr($0,9)}' \
-    "$ZEN/profiles.ini" | tr -d '\r')
-}
+git pull && bash install.sh
 ```
 
-Restart Zen and confirm the version number bumped in the console.
+Same as macOS / Linux — `install.sh` handles WSL natively since v20260415-3. Restart Zen and confirm the version number bumped in the console.
 
 ### Windows PowerShell
 ```powershell
