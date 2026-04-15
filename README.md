@@ -135,30 +135,23 @@ Zen Browser ships for Linux in three forms — the install experience differs pe
 
 ---
 
-#### Flatpak *(most common on modern distros)*
+#### Flatpak *(most common on modern distros — partial support)*
 
 ```bash
 bash install.sh
 ```
 
-The script detects the Flatpak install automatically (app ID: `app.zen_browser.zen`) and copies the userscript and CSS into your profile. **However**, the Flatpak app bundle is read-only, so fx-autoconfig's program files (`config.js`) cannot be written there automatically.
+The script auto-detects the Flatpak install (app ID: `app.zen_browser.zen`) and installs:
 
-You need to install fx-autoconfig's profile side manually:
+- ✅ The userscript (to `chrome/JS/`)
+- ✅ The CSS (to `userChrome.css`)
+- ✅ fx-autoconfig's **profile-side** utils (to `chrome/utils/`) — auto-installed from the vendored copy since v20260415-2
 
-```bash
-# Download fx-autoconfig
-curl -fsSL https://github.com/MrOtherGuy/fx-autoconfig/archive/refs/heads/master.zip \
-  -o /tmp/fx-autoconfig.zip
-unzip -q /tmp/fx-autoconfig.zip -d /tmp/fxac
+**What's still manual:** the Flatpak app bundle is a read-only squashfs, so fx-autoconfig's **program-side** files (`config.js`, `config-prefs.js`) can't be placed inside it by any installer. Without those two files the mod does not load.
 
-# Find your profile (path printed by install.sh)
-PROFILE="$HOME/.var/app/app.zen_browser.zen/zen/<your-profile>"
+The installer will print a red `⚠ INSTALL INCOMPLETE` box at the end explaining this — it no longer falsely reports success.
 
-mkdir -p "$PROFILE/chrome/utils"
-cp -r /tmp/fxac/fx-autoconfig-master/profile/chrome/utils/. "$PROFILE/chrome/utils/"
-```
-
-> The program-side `config.js` for Flatpak requires a Flatpak override. Until the Flatpak maintainers add an official hook, the cleanest workaround is to use the **tarball install** instead.
+> **Recommended workaround:** switch to the tarball install of Zen (see next section). The Flatpak path can't be fully fixed without upstream Flatpak maintainer buy-in for a `config.js` override hook.
 
 ---
 
