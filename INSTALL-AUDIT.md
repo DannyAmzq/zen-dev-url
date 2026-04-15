@@ -329,34 +329,14 @@ The installers also don't print the version being installed (only the `about:con
 
 ---
 
-## Appendix: Issue Templates for GitHub
+## Filed follow-up issues
 
-The following issues are ready to be filed. Each corresponds to a finding above.
+Each finding above was filed as a GitHub issue on 2026-04-15:
 
-### Issue: `install.sh` does not check for `curl` / `unzip` before use
-**Labels:** `bug`, `installer`  
-See Finding #1 above.
-
-### Issue: Add WSL support to `install.sh`
-**Labels:** `enhancement`, `installer`  
-See Finding #2 above.
-
-### Issue: Flatpak install misleadingly reports success when fx-autoconfig is not set up
-**Labels:** `bug`, `installer`, `ux`  
-See Finding #3 above.
-
-### Issue: Add `--uninstall` flag and `about:config` verification to installers
-**Labels:** `enhancement`, `installer`  
-See Finding #4 above.
-
-### Issue: Add `install.bat` wrapper to simplify Windows installation
-**Labels:** `enhancement`, `installer`  
-See Finding #5 above.
-
-### Issue: Vendor fx-autoconfig or investigate WebExtension packaging
-**Labels:** `enhancement`, `architecture`  
-See Finding #6 above.
-
-### Issue: Add `--help`, `--dry-run`, `--verify` CLI flags to installers
-**Labels:** `enhancement`, `installer`  
-See Finding #7 above.
+- **#8 — [install.sh does not check for curl / unzip before use](https://github.com/DannyAmzq/zen-dev-url/issues/8)** — Finding #1
+- **#9 — [Add WSL support to install.sh](https://github.com/DannyAmzq/zen-dev-url/issues/9)** — Finding #2 *(High severity)*
+- **#10 — [Flatpak install misleadingly reports success when fx-autoconfig is not set up](https://github.com/DannyAmzq/zen-dev-url/issues/10)** — Finding #3 *(High severity)*
+- **#11 — [Add --uninstall flag and about:config verification to installers](https://github.com/DannyAmzq/zen-dev-url/issues/11)** — Finding #4
+- **#12 — [Add install.bat wrapper to simplify Windows installation](https://github.com/DannyAmzq/zen-dev-url/issues/12)** — Finding #5
+- **#13 — [Vendor fx-autoconfig files or investigate WebExtension packaging](https://github.com/DannyAmzq/zen-dev-url/issues/13)** — Finding #6 *(High severity, architectural)*
+- **#14 — [Add --help, --dry-run, --verify CLI flags to installers](https://github.com/DannyAmzq/zen-dev-url/issues/14)** — Finding #7
