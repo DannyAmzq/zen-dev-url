@@ -136,10 +136,14 @@ if [[ ! -d "$FX_SRC/profile/chrome/utils" ]]; then
 fi
 
 if [[ "$IS_FLATPAK" == "true" ]]; then
-  warn "Flatpak: app bundle is read-only — skipping fx-autoconfig program files."
-  warn "You must install fx-autoconfig manually into your profile's chrome/utils/ folder."
-  warn "See: https://github.com/MrOtherGuy/fx-autoconfig#for-flatpak-installs"
-  warn "(The userscript and CSS will still be copied so you are ready once fx-autoconfig is set up.)"
+  # Flatpak: the app bundle is a read-only squashfs, so we cannot place
+  # program-side fx-autoconfig files (config.js, config-prefs.js) inside it.
+  # The profile-side utils ARE installable though — they live in the user's
+  # writable ~/.var/app directory. Step 4 handles that.
+  warn "Flatpak install detected — app bundle is read-only."
+  warn "Profile-side fx-autoconfig utils will be installed automatically,"
+  warn "but program-side files (config.js) CANNOT be placed into the bundle."
+  warn "A final manual step is required — see the summary at the end."
   echo ""
 else
   CONFIG_JS="$ZEN_RESOURCES/config.js"
@@ -173,12 +177,11 @@ for PROFILE_DIR in "${PROFILE_DIRS[@]}"; do
 
   [[ ${#PROFILE_DIRS[@]} -gt 1 ]] && info "─── $(basename "$PROFILE_DIR") ───"
 
-  # fx-autoconfig utils (per-profile, only if we downloaded source)
-  if [[ "$IS_FLATPAK" == "false" && -n "$FX_SRC" ]]; then
-    CHROME_UTILS="$PROFILE_DIR/chrome/utils"
-    mkdir -p "$CHROME_UTILS"
-    cp -r "$FX_SRC/profile/chrome/utils/." "$CHROME_UTILS/"
-  fi
+  # fx-autoconfig profile-side utils — always install from vendored copy.
+  # Safe on Flatpak because the profile lives in a writable user directory.
+  CHROME_UTILS="$PROFILE_DIR/chrome/utils"
+  mkdir -p "$CHROME_UTILS"
+  cp -r "$FX_SRC/profile/chrome/utils/." "$CHROME_UTILS/"
 
   # Userscript
   JS_DIR="$PROFILE_DIR/chrome/JS"
@@ -216,4 +219,33 @@ echo -e "${YELLOW}│                                                     │${N
 echo -e "${YELLOW}│  The dev banner will appear on localhost URLs.      │${NC}"
 echo -e "${YELLOW}└─────────────────────────────────────────────────────┘${NC}"
 echo ""
+
+# ── 6. Report status honestly ───────────────────────────────
+# On Flatpak the install is INCOMPLETE — program-side config.js cannot
+# be written into the read-only app bundle. Say so loudly instead of
+# printing a green "complete!" that leaves users wondering why nothing
+# happens after restart.
+
+if [[ "$IS_FLATPAK" == "true" ]]; then
+  echo -e "${RED}┌─────────────────────────────────────────────────────────┐${NC}"
+  echo -e "${RED}│  ⚠  INSTALL INCOMPLETE — FLATPAK-SPECIFIC STEP REQUIRED │${NC}"
+  echo -e "${RED}├─────────────────────────────────────────────────────────┤${NC}"
+  echo -e "${RED}│                                                         │${NC}"
+  echo -e "${RED}│  fx-autoconfig's profile-side utils were installed,     │${NC}"
+  echo -e "${RED}│  BUT the program-side files (config.js, config-prefs.js)│${NC}"
+  echo -e "${RED}│  could NOT be written — the Flatpak app bundle is a     │${NC}"
+  echo -e "${RED}│  read-only squashfs and no installer can modify it.     │${NC}"
+  echo -e "${RED}│                                                         │${NC}"
+  echo -e "${RED}│  Without those files, the mod will NOT LOAD.            │${NC}"
+  echo -e "${RED}│                                                         │${NC}"
+  echo -e "${RED}│  Recommended workaround: switch to the tarball install  │${NC}"
+  echo -e "${RED}│  of Zen. See the README > Linux (tarball) section.      │${NC}"
+  echo -e "${RED}│                                                         │${NC}"
+  echo -e "${RED}└─────────────────────────────────────────────────────────┘${NC}"
+  echo ""
+  warn "Partial install: $INSTALLED profile(s) received userscript + CSS + profile utils."
+  warn "Program-side fx-autoconfig MUST be handled separately before the mod will work."
+  exit 0   # not a script error — user action needed, not a failure
+fi
+
 success "Installation complete! ($INSTALLED profile(s) updated)"
