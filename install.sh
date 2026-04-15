@@ -65,10 +65,13 @@ elif [[ "$IS_WSL" == "true" ]]; then
   [[ -z "$ZEN_RESOURCES" ]] \
     && error "Could not find Zen Browser on the Windows side. Is it installed?"
 
-  # Sanity: we need write access to install fx-autoconfig program files.
-  # %PROGRAMFILES% typically requires Administrator on Windows.
-  if [[ ! -w "$ZEN_RESOURCES" ]]; then
+  # Sanity: we need write access to install fx-autoconfig program files —
+  # but ONLY if they aren't already there. If config.js exists (from a prior
+  # install.ps1 run or manual install), Step 3 will skip the write entirely
+  # and we don't need permissions at all.
+  if [[ ! -f "$ZEN_RESOURCES/config.js" && ! -w "$ZEN_RESOURCES" ]]; then
     warn "Cannot write to $ZEN_RESOURCES — likely needs Windows Administrator."
+    warn "fx-autoconfig's config.js is not yet installed and needs to be placed there."
     warn "Either: (a) re-run from an elevated WSL shell (launch wsl.exe as admin)"
     warn "or     (b) run install.ps1 from PowerShell on the Windows side instead."
     error "Aborting: no write permission for fx-autoconfig program files."
