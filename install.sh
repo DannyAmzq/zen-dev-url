@@ -25,12 +25,54 @@ SCRIPT_DIR="$(dirname "$0")"
 # ── 1. Detect OS and Zen paths ───────────────────────────────
 
 IS_FLATPAK=false
+IS_WSL=false
 ZEN_RESOURCES=""
+
+# WSL takes priority over the generic Linux branch: /proc/version contains
+# "microsoft" on WSL1/WSL2 but the filesystem target is the Windows-side
+# Zen install under /mnt/c, not a Linux Zen install.
+if grep -qi microsoft /proc/version 2>/dev/null; then
+  IS_WSL=true
+fi
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
   ZEN_APP="/Applications/Zen.app"
   ZEN_RESOURCES="$ZEN_APP/Contents/Resources"
   PROFILES_INI="$HOME/Library/Application Support/Zen/profiles.ini"
+
+elif [[ "$IS_WSL" == "true" ]]; then
+  # ── WSL: Zen is installed on the Windows side under %APPDATA%\zen, ─
+  #     program files under %LOCALAPPDATA%\zen or %PROGRAMFILES%\Zen Browser.
+  command -v cmd.exe &>/dev/null \
+    || error "WSL detected but cmd.exe is not on PATH — cannot resolve Windows user."
+  WINUSER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r\n')
+  [[ -n "$WINUSER" ]] \
+    || error "Could not determine Windows username via cmd.exe. Is /mnt/c accessible?"
+  info "WSL install detected (Windows user: $WINUSER)"
+
+  PROFILES_INI="/mnt/c/Users/$WINUSER/AppData/Roaming/zen/profiles.ini"
+
+  # Look for zen.exe in the standard Windows install locations.
+  for _candidate in \
+      "/mnt/c/Users/$WINUSER/AppData/Local/zen" \
+      "/mnt/c/Program Files/Zen Browser" \
+      "/mnt/c/Program Files (x86)/Zen Browser"; do
+    if [[ -f "$_candidate/zen.exe" ]]; then
+      ZEN_RESOURCES="$_candidate"
+      break
+    fi
+  done
+  [[ -z "$ZEN_RESOURCES" ]] \
+    && error "Could not find Zen Browser on the Windows side. Is it installed?"
+
+  # Sanity: we need write access to install fx-autoconfig program files.
+  # %PROGRAMFILES% typically requires Administrator on Windows.
+  if [[ ! -w "$ZEN_RESOURCES" ]]; then
+    warn "Cannot write to $ZEN_RESOURCES — likely needs Windows Administrator."
+    warn "Either: (a) re-run from an elevated WSL shell (launch wsl.exe as admin)"
+    warn "or     (b) run install.ps1 from PowerShell on the Windows side instead."
+    error "Aborting: no write permission for fx-autoconfig program files."
+  fi
 
 elif [[ "$OSTYPE" == "linux-gnu"* || "$OSTYPE" == "linux"* ]]; then
   # ── Flatpak (app bundle is read-only; profile lives under ~/.var/app) ──
