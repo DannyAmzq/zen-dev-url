@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260416-5';
+  const ZEN_DEV_URL_VERSION = '20260416-6';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -189,31 +189,52 @@
         }
       };
 
-      // Click: focus the real urlbar for full autocomplete. We intentionally
-      // do NOT mirror text or reposition Zen's popup — mirroring blanks our
-      // field when the user deletes in gURLBar (making the banner collapse),
-      // and repositioning Zen's popup breaks its normal sidebar behavior.
-      // The banner stays as a static "you're on a dev URL" display; the real
-      // urlbar appears in its usual place with full Zen autocomplete.
+      // Click: redirect focus to gURLBar for full autocomplete (history,
+      // bookmarks, "Switch to Tab", search suggestions). Our field mirrors
+      // gURLBar's text via RAF and shows a CSS-animated caret so it looks
+      // like the user is typing here. We do NOT reposition Zen's autocomplete
+      // popup — that broke the normal URL bar. The popup appears in Zen's
+      // usual sidebar location.
       field.addEventListener('mousedown', (e) => {
         e.preventDefault();
         e.stopPropagation();
         field.setAttribute('data-active', '');
+
         const startUri = gBrowser.currentURI.spec;
         try {
           gURLBar.focus();
           gURLBar.value = startUri;
           gURLBar.select();
-        } catch (err) { console.error('[zen-dev-url] urlbar focus failed:', err); }
+        } catch (err) {
+          console.error('[zen-dev-url] urlbar focus failed:', err);
+          field.removeAttribute('data-active');
+          return;
+        }
 
-        // Clear the active state on blur (user navigated or cancelled).
-        // If no navigation happened, restore gURLBar.value to the current URI
-        // so the real urlbar doesn't sit with leftover typed text.
+        // Mirror gURLBar value → our field. When empty, show placeholder
+        // text so the field never collapses.
+        let active = true;
+        const mirror = () => {
+          if (!active) return;
+          const val = gURLBar.value;
+          if (val) {
+            field.textContent = val;
+            field.classList.remove('zen-dev-url-placeholder');
+          } else {
+            field.textContent = 'Search or enter URL';
+            field.classList.add('zen-dev-url-placeholder');
+          }
+          requestAnimationFrame(mirror);
+        };
+        requestAnimationFrame(mirror);
+
         const cleanup = () => {
+          active = false;
           gURLBar.inputField.removeEventListener('blur', cleanup);
           setTimeout(() => {
-            field.removeAttribute('data-active');
+            field.classList.remove('zen-dev-url-placeholder');
             const nowUri = gBrowser.currentURI.spec;
+            showDisplay(nowUri);
             if (nowUri === startUri && gURLBar.value !== nowUri) {
               gURLBar.value = nowUri;
             }
