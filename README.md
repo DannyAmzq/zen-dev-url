@@ -114,12 +114,11 @@ After that, follow the one-time prompt to enable `toolkit.legacyUserProfileCusto
 
 ---
 
-### Windows — PowerShell
+### Windows
 
-Right-click `install.ps1` → **Run with PowerShell**, or from a PowerShell terminal:
+Double-click **`install.bat`** — it handles execution policy automatically. Or from a PowerShell terminal:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass
 .\install.ps1
 ```
 
@@ -259,10 +258,34 @@ git pull && bash install.sh
 
 Same as macOS / Linux — `install.sh` handles WSL natively since v20260415-3. Restart Zen and confirm the version number bumped in the console.
 
-### Windows PowerShell
+### Windows
 ```powershell
 git pull
 .\install.ps1
+```
+
+---
+
+## Installer options
+
+Both `install.sh` and `install.ps1` accept the following flags:
+
+| Flag | PowerShell | What it does |
+|---|---|---|
+| `--help` | `-Help` | Show usage and exit |
+| `--uninstall` | `-Uninstall` | Remove zen-dev-url files from all profiles |
+| `--verify` | `-Verify` | Check that the install is healthy |
+| `--dry-run` | `-DryRun` | Show what would be done, change nothing |
+
+```bash
+# Check if everything is installed correctly
+bash install.sh --verify
+
+# Remove zen-dev-url (leaves fx-autoconfig in place)
+bash install.sh --uninstall
+
+# Preview what the installer will do
+bash install.sh --dry-run
 ```
 
 ---
