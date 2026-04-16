@@ -70,10 +70,10 @@
             -45deg,
             transparent,
             transparent 6px,
-            rgba(255, 107, 53, 0.18) 6px,
-            rgba(255, 107, 53, 0.18) 12px
+            rgba(255, 107, 53, 0.22) 6px,
+            rgba(255, 107, 53, 0.22) 12px
         ),
-        color-mix(in srgb, #ff6b35 28%, var(--toolbar-bgcolor));
+        rgba(30, 12, 5, 0.92);
     border-bottom: 1.5px solid #ff6b35;
     cursor: default;
     opacity: 0;
@@ -89,7 +89,7 @@
 /* Push the page content down so the banner doesn't overlap it */
 :root[zen-dev-url] #tabbrowser-tabpanels > .browserSidebarContainer {
     padding-top: 44px !important;
-    background-color: color-mix(in srgb, #ff6b35 15%, var(--toolbar-bgcolor)) !important;
+    background-color: rgba(30, 12, 5, 0.85) !important;
 }
 
 /* Push Zen chrome elements below the dev banner */
@@ -114,10 +114,10 @@
             -45deg,
             transparent,
             transparent 6px,
-            rgba(255, 107, 53, 0.25) 6px,
-            rgba(255, 107, 53, 0.25) 12px
+            rgba(255, 107, 53, 0.28) 6px,
+            rgba(255, 107, 53, 0.28) 12px
         ),
-        color-mix(in srgb, #ff6b35 35%, var(--toolbar-bgcolor));
+        rgba(45, 18, 8, 0.95);
 }
 
 /* URL field — display mode shows styled protocol/host, click redirects
@@ -125,6 +125,7 @@
 #zen-dev-url-field {
     flex: 1;
     min-width: 0;
+    min-height: 24px;
     padding: 4px 8px;
     border-radius: 4px;
     background: rgba(0, 0, 0, 0.35);
