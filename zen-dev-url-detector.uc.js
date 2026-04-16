@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260416-3';
+  const ZEN_DEV_URL_VERSION = '20260416-4';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -568,7 +568,7 @@
       const isDev = this._prefs?.enabled && ((this._isDevUri(currentUri) && !excluded) || forced);
       document.documentElement.toggleAttribute('zen-dev-url', isDev);
       if (isDev && currentUri) {
-        if (this._field && this._field.getAttribute('contenteditable') === 'false') {
+        if (this._field && !this._field.hasAttribute('data-active')) {
           this._showDisplay(currentUri.spec);
         }
         this._updateViewport();
