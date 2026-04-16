@@ -6,6 +6,13 @@
 #       overwriting, and is safe to re-run (idempotent).
 # ============================================================
 
+param(
+  [switch]$Help,
+  [switch]$Uninstall,
+  [switch]$Verify,
+  [switch]$DryRun
+)
+
 $ErrorActionPreference = "Stop"
 
 function Info    { param($msg) Write-Host "[zen-dev-url] $msg" -ForegroundColor Cyan }
@@ -13,7 +20,40 @@ function Success { param($msg) Write-Host "[zen-dev-url] $msg" -ForegroundColor 
 function Warn    { param($msg) Write-Host "[zen-dev-url] $msg" -ForegroundColor Yellow }
 function Fail    { param($msg) Write-Host "[zen-dev-url] $msg" -ForegroundColor Red; exit 1 }
 
+# ── 0. Parse flags ──────────────────────────────────────────
+
+if ($Help) {
+  Write-Host @"
+zen-dev-url installer — Windows (PowerShell)
+
+Usage: .\install.ps1 [OPTIONS]
+
+Options:
+  -Help         Show this help message and exit
+  -Uninstall    Remove zen-dev-url files from all detected profiles
+  -Verify       Check whether zen-dev-url is correctly installed
+  -DryRun       Show what would be done without making changes
+
+Without options, installs zen-dev-url to all detected Zen profiles.
+"@
+  exit 0
+}
+
+if     ($Uninstall) { $Mode = "uninstall" }
+elseif ($Verify)    { $Mode = "verify" }
+elseif ($DryRun)    { $Mode = "dry-run" }
+else                { $Mode = "install" }
+
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# Print version
+$verLine = Select-String -Path "$ScriptDir\zen-dev-url-detector.uc.js" -Pattern "ZEN_DEV_URL_VERSION\s*=\s*'([^']+)'" | Select-Object -First 1
+if ($verLine -and $verLine.Matches.Groups.Count -gt 1) {
+  $Version = $verLine.Matches.Groups[1].Value
+} else {
+  $Version = "unknown"
+}
+Info "zen-dev-url v$Version — $Mode"
 
 # ── 1. Find Zen installation ─────────────────────────────────
 
@@ -85,45 +125,158 @@ if ($ProfileDirs.Count -eq 1) {
   foreach ($d in $ProfileDirs) { Info "  $d" }
 }
 
+# ── Mode: -Verify ───────────────────────────────────────────
+if ($Mode -eq "verify") {
+  $Pass = 0; $FailCount = 0
+
+  $ConfigJs = Join-Path $ZenResources "config.js"
+  if (Test-Path $ConfigJs) {
+    Success "✔ fx-autoconfig config.js found"; $Pass++
+  } else {
+    Warn "✘ fx-autoconfig config.js MISSING at $ZenResources"; $FailCount++
+  }
+
+  foreach ($ProfileDir in $ProfileDirs) {
+    if ($ProfileDirs.Count -gt 1) { Info "─── $(Split-Path -Leaf $ProfileDir) ───" }
+
+    $js = Join-Path $ProfileDir "chrome\JS\zen-dev-url-detector.uc.js"
+    if (Test-Path $js) {
+      Success "✔ Userscript installed"; $Pass++
+    } else {
+      Warn "✘ Userscript MISSING"; $FailCount++
+    }
+
+    $css = Join-Path $ProfileDir "chrome\userChrome.css"
+    if ((Test-Path $css) -and (Get-Content $css -Raw) -match [regex]::Escape("/* zen-dev-url */")) {
+      Success "✔ CSS styles present in userChrome.css"; $Pass++
+    } else {
+      Warn "✘ CSS styles MISSING from userChrome.css"; $FailCount++
+    }
+
+    $manifest = Join-Path $ProfileDir "chrome\utils\chrome.manifest"
+    if (Test-Path $manifest) {
+      Success "✔ fx-autoconfig profile utils installed"; $Pass++
+    } else {
+      Warn "✘ fx-autoconfig profile utils MISSING"; $FailCount++
+    }
+
+    $prefs = Join-Path $ProfileDir "prefs.js"
+    if ((Test-Path $prefs) -and (Select-String -Path $prefs -Pattern 'toolkit.legacyUserProfileCustomizations.stylesheets.*true' -Quiet)) {
+      Success "✔ Stylesheet pref enabled"; $Pass++
+    } else {
+      Warn "✘ toolkit.legacyUserProfileCustomizations.stylesheets not set (check about:config)"; $FailCount++
+    }
+  }
+
+  Write-Host ""
+  $total = $Pass + $FailCount
+  if ($FailCount -eq 0) {
+    Success "All checks passed ($Pass/$total)"
+  } else {
+    Warn "$FailCount of $total checks failed"
+  }
+  exit 0
+}
+
+# ── Mode: -Uninstall ────────────────────────────────────────
+if ($Mode -eq "uninstall") {
+  $Removed = 0
+  foreach ($ProfileDir in $ProfileDirs) {
+    if ($ProfileDirs.Count -gt 1) { Info "─── $(Split-Path -Leaf $ProfileDir) ───" }
+
+    # Remove userscript
+    $js = Join-Path $ProfileDir "chrome\JS\zen-dev-url-detector.uc.js"
+    if (Test-Path $js) {
+      Remove-Item $js -Force
+      Success "Removed userscript"
+    } else {
+      Warn "Userscript not found, skipping"
+    }
+
+    # Strip CSS block (from marker to EOF)
+    $css = Join-Path $ProfileDir "chrome\userChrome.css"
+    $Marker = "/* zen-dev-url */"
+    if ((Test-Path $css) -and (Get-Content $css -Raw) -match [regex]::Escape($Marker)) {
+      $lines = Get-Content $css
+      $idx = ($lines | Select-String -SimpleMatch $Marker | Select-Object -First 1).LineNumber - 1
+      if ($idx -gt 0) {
+        $lines[0..($idx - 1)] | Set-Content $css -Encoding UTF8
+      } else {
+        Set-Content $css "" -Encoding UTF8
+      }
+      Success "Removed zen-dev-url styles from userChrome.css"
+    } else {
+      Warn "No zen-dev-url styles found in userChrome.css, skipping"
+    }
+
+    $Removed++
+  }
+
+  Write-Host ""
+  Info "fx-autoconfig was left in place (other mods may depend on it)."
+  Info "To remove it: delete config.js + defaults\pref\config-prefs.js from"
+  Info "  $ZenResources"
+  Info "and chrome\utils\ from each profile directory."
+  Write-Host ""
+  Success "Uninstall complete ($Removed profile(s) cleaned). Restart Zen."
+  exit 0
+}
+
+# ── Mode: -DryRun ───────────────────────────────────────────
+if ($Mode -eq "dry-run") {
+  $FxSrc = Join-Path $ScriptDir "vendor\fx-autoconfig"
+  Write-Host ""
+  Info "Dry run — no changes will be made."
+  Write-Host ""
+
+  $ConfigJs = Join-Path $ZenResources "config.js"
+  if (-not (Test-Path $ConfigJs)) {
+    Info "  • Would install fx-autoconfig program files to $ZenResources"
+  } else {
+    Info "  • fx-autoconfig program files already present (skip)"
+  }
+
+  foreach ($ProfileDir in $ProfileDirs) {
+    Info "  Profile: $(Split-Path -Leaf $ProfileDir)"
+    Info "    • Copy fx-autoconfig utils → chrome\utils\"
+    Info "    • Copy zen-dev-url-detector.uc.js → chrome\JS\"
+    $css = Join-Path $ProfileDir "chrome\userChrome.css"
+    if ((Test-Path $css) -and (Get-Content $css -Raw) -match [regex]::Escape("/* zen-dev-url */")) {
+      Info "    • CSS already present (skip)"
+    } else {
+      Info "    • Append zen-dev-url.css → userChrome.css"
+    }
+  }
+
+  Write-Host ""
+  Info "No changes were made. Remove -DryRun to install."
+  exit 0
+}
+
 # ── 3. Check / install fx-autoconfig ─────────────────────────
+# fx-autoconfig is vendored in vendor\fx-autoconfig\ — no network fetch
+# or Expand-Archive dependency needed. See vendor\fx-autoconfig\README.md.
+#
 # Program files go into the Zen binary directory (once).
 # Utils go into each profile's chrome\utils\ (per-profile loop below).
 
+$FxSrc = Join-Path $ScriptDir "vendor\fx-autoconfig"
+if (-not (Test-Path (Join-Path $FxSrc "profile\chrome\utils"))) {
+  Fail "Vendored fx-autoconfig not found at $FxSrc — did you clone the repo with its full tree?"
+}
+
 $ConfigJs = Join-Path $ZenResources "config.js"
-$FxSrc    = $null
 
-# Download source if program files are missing OR any profile is missing utils
-$needsDownload = (-not (Test-Path $ConfigJs)) -or
-                 ($ProfileDirs | Where-Object { -not (Test-Path (Join-Path $_ "chrome\utils")) }).Count -gt 0
+if (-not (Test-Path $ConfigJs)) {
+  Copy-Item (Join-Path $FxSrc "program\config.js") $ConfigJs
 
-$TmpDir = $null
-if ($needsDownload) {
-  Info "Downloading fx-autoconfig..."
+  $PrefsDir = Join-Path $ZenResources "defaults\pref"
+  New-Item -ItemType Directory -Force -Path $PrefsDir | Out-Null
+  Copy-Item (Join-Path $FxSrc "program\defaults\pref\config-prefs.js") "$PrefsDir\config-prefs.js"
 
-  $TmpDir  = Join-Path $env:TEMP "fx-autoconfig-install"
-  # Clean any leftovers from a previous run so Expand-Archive doesn't see stale files
-  if (Test-Path $TmpDir) { Remove-Item $TmpDir -Recurse -Force }
-  New-Item -ItemType Directory -Force -Path $TmpDir | Out-Null
-
-  $ZipPath = Join-Path $TmpDir "fx-autoconfig.zip"
-  Invoke-WebRequest -Uri "https://github.com/MrOtherGuy/fx-autoconfig/archive/refs/heads/master.zip" `
-    -OutFile $ZipPath
-  Expand-Archive -Path $ZipPath -DestinationPath $TmpDir -Force
-  $FxSrc = Join-Path $TmpDir "fx-autoconfig-master"
-
-  if (-not (Test-Path $ConfigJs)) {
-    Copy-Item "$FxSrc\program\config.js" $ConfigJs
-
-    $PrefsDir = Join-Path $ZenResources "defaults\pref"
-    New-Item -ItemType Directory -Force -Path $PrefsDir | Out-Null
-    Copy-Item "$FxSrc\program\defaults\pref\config-prefs.js" "$PrefsDir\config-prefs.js"
-
-    Success "fx-autoconfig program files installed."
-  } else {
-    Success "fx-autoconfig program files already installed."
-  }
+  Success "fx-autoconfig program files installed (from vendored copy)."
 } else {
-  Success "fx-autoconfig already installed, skipping."
+  Success "fx-autoconfig program files already installed."
 }
 
 # ── 4. Install to each profile ───────────────────────────────
@@ -135,12 +288,10 @@ foreach ($ProfileDir in $ProfileDirs) {
     Info "─── $(Split-Path -Leaf $ProfileDir) ───"
   }
 
-  # fx-autoconfig utils (per-profile, only if we downloaded source)
-  if ($FxSrc) {
-    $UtilsDest = Join-Path $ProfileDir "chrome\utils"
-    New-Item -ItemType Directory -Force -Path $UtilsDest | Out-Null
-    Copy-Item "$FxSrc\profile\chrome\utils\*" $UtilsDest -Recurse -Force
-  }
+  # fx-autoconfig utils (per-profile, from vendored copy)
+  $UtilsDest = Join-Path $ProfileDir "chrome\utils"
+  New-Item -ItemType Directory -Force -Path $UtilsDest | Out-Null
+  Copy-Item "$FxSrc\profile\chrome\utils\*" $UtilsDest -Recurse -Force
 
   # Userscript
   $JsDir = Join-Path $ProfileDir "chrome\JS"
@@ -165,9 +316,6 @@ foreach ($ProfileDir in $ProfileDirs) {
 }
 
 if ($Installed -eq 0) { Fail "No profiles were successfully installed to." }
-
-# Clean up the fx-autoconfig download dir
-if ($TmpDir -and (Test-Path $TmpDir)) { Remove-Item $TmpDir -Recurse -Force }
 
 # ── 5. Remind about about:config ─────────────────────────────
 
