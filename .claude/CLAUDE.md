@@ -1,5 +1,8 @@
 # zen-dev-url — dev notes
 
+## Authorship
+All commits, issues, and PRs MUST be authored under DannyAmzq's account. Never reference Claude as the author. If Claude must be referenced for any reason, always co-author DannyAmzq's account. No commit messages, PR descriptions, or issue bodies should attribute work to Claude or AI tooling.
+
 ## Branch
 All development happens on `dev`.
 
