@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260416-6';
+  const ZEN_DEV_URL_VERSION = '20260416-7';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -189,17 +189,50 @@
         }
       };
 
-      // Click: redirect focus to gURLBar for full autocomplete (history,
-      // bookmarks, "Switch to Tab", search suggestions). Our field mirrors
-      // gURLBar's text via RAF and shows a CSS-animated caret so it looks
-      // like the user is typing here. We do NOT reposition Zen's autocomplete
-      // popup — that broke the normal URL bar. The popup appears in Zen's
-      // usual sidebar location.
+      // Click: visually relocate the real #urlbar into our banner slot so
+      // the user types in the native Firefox/Zen urlbar — with real cursor,
+      // real autocomplete, real popup, real keybindings. We save the urlbar's
+      // inline style and restore it on blur; zen-dev-url-search attribute on
+      // <html> lets CSS retheme the real urlbar orange while it's "ours".
       field.addEventListener('mousedown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        field.setAttribute('data-active', '');
 
+        const urlbar = document.getElementById('urlbar');
+        if (!urlbar) return;
+        // Guard against re-entry if cleanup is pending
+        if (urlbar.dataset.zenDevUrlActive) return;
+        urlbar.dataset.zenDevUrlActive = '1';
+
+        field.setAttribute('data-active', '');
+        document.documentElement.setAttribute('zen-dev-url-search', '');
+
+        // Save original inline style attribute for clean restore.
+        const savedStyle = urlbar.getAttribute('style') || '';
+
+        // Position the real urlbar over our field slot. Use fixed positioning
+        // so parent stacking/overflow can't clip it.
+        const reposition = () => {
+          const rect = field.getBoundingClientRect();
+          urlbar.style.setProperty('position', 'fixed', 'important');
+          urlbar.style.setProperty('top', rect.top + 'px', 'important');
+          urlbar.style.setProperty('left', rect.left + 'px', 'important');
+          urlbar.style.setProperty('width', rect.width + 'px', 'important');
+          urlbar.style.setProperty('min-width', rect.width + 'px', 'important');
+          urlbar.style.setProperty('max-width', rect.width + 'px', 'important');
+          urlbar.style.setProperty('height', rect.height + 'px', 'important');
+          urlbar.style.setProperty('z-index', '100', 'important');
+          urlbar.style.setProperty('visibility', 'visible', 'important');
+          urlbar.style.setProperty('opacity', '1', 'important');
+          urlbar.style.setProperty('display', 'flex', 'important');
+          urlbar.style.setProperty('margin', '0', 'important');
+        };
+        reposition();
+
+        // Hide our display slot while the real urlbar occupies its space
+        field.style.visibility = 'hidden';
+
+        // Focus + select the real urlbar
         const startUri = gBrowser.currentURI.spec;
         try {
           gURLBar.focus();
@@ -207,38 +240,42 @@
           gURLBar.select();
         } catch (err) {
           console.error('[zen-dev-url] urlbar focus failed:', err);
-          field.removeAttribute('data-active');
-          return;
         }
 
-        // Mirror gURLBar value → our field. When empty, show placeholder
-        // text so the field never collapses.
-        let active = true;
-        const mirror = () => {
-          if (!active) return;
-          const val = gURLBar.value;
-          if (val) {
-            field.textContent = val;
-            field.classList.remove('zen-dev-url-placeholder');
-          } else {
-            field.textContent = 'Search or enter URL';
-            field.classList.add('zen-dev-url-placeholder');
-          }
-          requestAnimationFrame(mirror);
+        // Keep the urlbar anchored to our field if the window/sidebar resizes
+        let rafPending = false;
+        const onResize = () => {
+          if (rafPending) return;
+          rafPending = true;
+          requestAnimationFrame(() => {
+            rafPending = false;
+            reposition();
+          });
         };
-        requestAnimationFrame(mirror);
+        window.addEventListener('resize', onResize);
+        const tabpanels = document.getElementById('tabbrowser-tabpanels');
+        let ro = null;
+        if (tabpanels && typeof ResizeObserver === 'function') {
+          ro = new ResizeObserver(onResize);
+          ro.observe(tabpanels);
+        }
 
         const cleanup = () => {
-          active = false;
           gURLBar.inputField.removeEventListener('blur', cleanup);
+          window.removeEventListener('resize', onResize);
+          if (ro) ro.disconnect();
+          // Delay so navigation (which also blurs) completes first
           setTimeout(() => {
-            field.classList.remove('zen-dev-url-placeholder');
+            // Restore inline style attribute verbatim
+            if (savedStyle) urlbar.setAttribute('style', savedStyle);
+            else urlbar.removeAttribute('style');
+            delete urlbar.dataset.zenDevUrlActive;
+            document.documentElement.removeAttribute('zen-dev-url-search');
+            field.style.visibility = '';
+            field.removeAttribute('data-active');
             const nowUri = gBrowser.currentURI.spec;
             showDisplay(nowUri);
-            if (nowUri === startUri && gURLBar.value !== nowUri) {
-              gURLBar.value = nowUri;
-            }
-          }, 100);
+          }, 80);
         };
         gURLBar.inputField.addEventListener('blur', cleanup);
       });
