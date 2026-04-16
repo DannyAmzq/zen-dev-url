@@ -20,7 +20,42 @@ success() { echo -e "${GREEN}[zen-dev-url]${NC} $1"; }
 warn()    { echo -e "${YELLOW}[zen-dev-url]${NC} $1"; }
 error()   { echo -e "${RED}[zen-dev-url]${NC} $1"; exit 1; }
 
-SCRIPT_DIR="$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# ── 0. Parse CLI flags ──────────────────────────────────────
+
+MODE="install"
+
+show_help() {
+  cat <<'HELP'
+zen-dev-url installer — Mac, Linux, and WSL
+
+Usage: bash install.sh [OPTIONS]
+
+Options:
+  -h, --help        Show this help message and exit
+      --uninstall   Remove zen-dev-url files from all detected profiles
+      --verify      Check whether zen-dev-url is correctly installed
+      --dry-run     Show what would be done without making changes
+
+Without options, installs zen-dev-url to all detected Zen profiles.
+HELP
+  exit 0
+}
+
+for arg in "$@"; do
+  case "$arg" in
+    --help|-h)      show_help ;;
+    --uninstall)    MODE="uninstall" ;;
+    --verify)       MODE="verify" ;;
+    --dry-run)      MODE="dry-run" ;;
+    *)              error "Unknown option: $arg (try --help)" ;;
+  esac
+done
+
+VERSION=$(sed -n "s/.*ZEN_DEV_URL_VERSION *= *'\([^']*\)'.*/\1/p" "$SCRIPT_DIR/zen-dev-url-detector.uc.js" 2>/dev/null)
+[[ -z "$VERSION" ]] && VERSION="unknown"
+info "zen-dev-url v$VERSION — $MODE"
 
 # ── 1. Detect OS and Zen paths ───────────────────────────────
 
@@ -165,6 +200,133 @@ if [[ ${#PROFILE_DIRS[@]} -eq 1 ]]; then
 else
   info "Detected ${#PROFILE_DIRS[@]} Zen channel profiles — installing to all:"
   for p in "${PROFILE_DIRS[@]}"; do info "  $p"; done
+fi
+
+# ── Mode: --verify ──────────────────────────────────────────
+if [[ "$MODE" == "verify" ]]; then
+  PASS=0; FAIL=0
+
+  # Program-side fx-autoconfig (skip on Flatpak — can't be installed there)
+  if [[ "$IS_FLATPAK" == "false" ]]; then
+    if [[ -f "$ZEN_RESOURCES/config.js" ]]; then
+      success "✔ fx-autoconfig config.js found"; PASS=$((PASS + 1))
+    else
+      warn "✘ fx-autoconfig config.js MISSING at $ZEN_RESOURCES"; FAIL=$((FAIL + 1))
+    fi
+  fi
+
+  for PROFILE_DIR in "${PROFILE_DIRS[@]}"; do
+    [[ ! -d "$PROFILE_DIR" ]] && continue
+    [[ ${#PROFILE_DIRS[@]} -gt 1 ]] && info "─── $(basename "$PROFILE_DIR") ───"
+
+    if [[ -f "$PROFILE_DIR/chrome/JS/zen-dev-url-detector.uc.js" ]]; then
+      success "✔ Userscript installed"; PASS=$((PASS + 1))
+    else
+      warn "✘ Userscript MISSING at $PROFILE_DIR/chrome/JS/"; FAIL=$((FAIL + 1))
+    fi
+
+    if grep -qF "/* zen-dev-url */" "$PROFILE_DIR/chrome/userChrome.css" 2>/dev/null; then
+      success "✔ CSS styles present in userChrome.css"; PASS=$((PASS + 1))
+    else
+      warn "✘ CSS styles MISSING from userChrome.css"; FAIL=$((FAIL + 1))
+    fi
+
+    if [[ -f "$PROFILE_DIR/chrome/utils/chrome.manifest" ]]; then
+      success "✔ fx-autoconfig profile utils installed"; PASS=$((PASS + 1))
+    else
+      warn "✘ fx-autoconfig profile utils MISSING"; FAIL=$((FAIL + 1))
+    fi
+
+    if grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets.*true' \
+         "$PROFILE_DIR/prefs.js" 2>/dev/null; then
+      success "✔ Stylesheet pref enabled in prefs.js"; PASS=$((PASS + 1))
+    else
+      warn "✘ toolkit.legacyUserProfileCustomizations.stylesheets not set (check about:config)"; FAIL=$((FAIL + 1))
+    fi
+  done
+
+  echo ""
+  if [[ $FAIL -eq 0 ]]; then
+    success "All checks passed ($PASS/$((PASS + FAIL)))"
+  else
+    warn "$FAIL of $((PASS + FAIL)) checks failed"
+  fi
+  exit 0
+fi
+
+# ── Mode: --uninstall ───────────────────────────────────────
+if [[ "$MODE" == "uninstall" ]]; then
+  REMOVED=0
+  for PROFILE_DIR in "${PROFILE_DIRS[@]}"; do
+    [[ ! -d "$PROFILE_DIR" ]] && continue
+    [[ ${#PROFILE_DIRS[@]} -gt 1 ]] && info "─── $(basename "$PROFILE_DIR") ───"
+
+    # Remove userscript
+    _js="$PROFILE_DIR/chrome/JS/zen-dev-url-detector.uc.js"
+    if [[ -f "$_js" ]]; then
+      rm "$_js"
+      success "Removed userscript"
+    else
+      warn "Userscript not found, skipping"
+    fi
+
+    # Strip CSS block (from marker to EOF)
+    _css="$PROFILE_DIR/chrome/userChrome.css"
+    _marker="/* zen-dev-url */"
+    if [[ -f "$_css" ]] && grep -qF "$_marker" "$_css"; then
+      # Portable: truncate file at the marker line
+      _line=$(grep -nF "$_marker" "$_css" | head -1 | cut -d: -f1)
+      head -n $((_line - 1)) "$_css" > "$_css.tmp" && mv "$_css.tmp" "$_css"
+      success "Removed zen-dev-url styles from userChrome.css"
+    else
+      warn "No zen-dev-url styles found in userChrome.css, skipping"
+    fi
+
+    REMOVED=$((REMOVED + 1))
+  done
+
+  echo ""
+  info "fx-autoconfig was left in place (other mods may depend on it)."
+  info "To remove it: delete config.js + defaults/pref/config-prefs.js from"
+  info "  $ZEN_RESOURCES"
+  info "and chrome/utils/ from each profile directory."
+  echo ""
+  success "Uninstall complete ($REMOVED profile(s) cleaned). Restart Zen."
+  exit 0
+fi
+
+# ── Mode: --dry-run ─────────────────────────────────────────
+if [[ "$MODE" == "dry-run" ]]; then
+  FX_SRC="$SCRIPT_DIR/vendor/fx-autoconfig"
+  echo ""
+  info "Dry run — no changes will be made."
+  echo ""
+
+  if [[ "$IS_FLATPAK" == "false" ]]; then
+    if [[ ! -f "$ZEN_RESOURCES/config.js" ]]; then
+      info "  • Would install fx-autoconfig program files to $ZEN_RESOURCES"
+    else
+      info "  • fx-autoconfig program files already present (skip)"
+    fi
+  else
+    info "  • Flatpak detected — program-side fx-autoconfig cannot be installed"
+  fi
+
+  for PROFILE_DIR in "${PROFILE_DIRS[@]}"; do
+    [[ ! -d "$PROFILE_DIR" ]] && continue
+    info "  Profile: $(basename "$PROFILE_DIR")"
+    info "    • Copy fx-autoconfig utils → chrome/utils/"
+    info "    • Copy zen-dev-url-detector.uc.js → chrome/JS/"
+    if grep -qF "/* zen-dev-url */" "$PROFILE_DIR/chrome/userChrome.css" 2>/dev/null; then
+      info "    • CSS already present (skip)"
+    else
+      info "    • Append zen-dev-url.css → userChrome.css"
+    fi
+  done
+
+  echo ""
+  info "No changes were made. Remove --dry-run to install."
+  exit 0
 fi
 
 # ── 3. Check / install fx-autoconfig ────────────────────────
