@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260416-4';
+  const ZEN_DEV_URL_VERSION = '20260416-5';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -173,7 +173,6 @@
 
       const showDisplay = (spec) => {
         field.removeAttribute('data-active');
-        document.documentElement.removeAttribute('zen-dev-url-search');
         const match = spec.match(/^((?:https?|file):\/\/\/?)(.*)/);
         field.innerHTML = '';
         if (match) {
@@ -190,111 +189,33 @@
         }
       };
 
-      // Click: redirect focus to the real urlbar for full autocomplete.
-      // Our field mirrors gURLBar's text, and JS repositions the dropdown
-      // popup under our banner field (CSS alone can't — the popup element
-      // varies across Firefox/Zen versions and isn't known ahead of time).
+      // Click: focus the real urlbar for full autocomplete. We intentionally
+      // do NOT mirror text or reposition Zen's popup — mirroring blanks our
+      // field when the user deletes in gURLBar (making the banner collapse),
+      // and repositioning Zen's popup breaks its normal sidebar behavior.
+      // The banner stays as a static "you're on a dev URL" display; the real
+      // urlbar appears in its usual place with full Zen autocomplete.
       field.addEventListener('mousedown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-
-        const DEBUG = Services.prefs.getBoolPref('zen.urlbar.dev-indicator.self-tests', false);
-        const log = (...args) => DEBUG && console.log('[zen-dev-url:bridge]', ...args);
-
         field.setAttribute('data-active', '');
-        document.documentElement.setAttribute('zen-dev-url-search', '');
-
         const startUri = gBrowser.currentURI.spec;
-        gURLBar.value = startUri;
-        gURLBar.select();
-        log('opened, focused gURLBar with', startUri);
+        try {
+          gURLBar.focus();
+          gURLBar.value = startUri;
+          gURLBar.select();
+        } catch (err) { console.error('[zen-dev-url] urlbar focus failed:', err); }
 
-        // Mirror gURLBar value to our field
-        let active = true;
-        const mirror = () => {
-          if (!active) return;
-          field.textContent = gURLBar.value;
-          requestAnimationFrame(mirror);
-        };
-        requestAnimationFrame(mirror);
-
-        // Position the urlbar popup under our banner field. The dropdown
-        // element varies (Zen vs Firefox vs versions), so try several
-        // candidates and use the first visible one.
-        const POPUP_SELECTORS = [
-          '#urlbar .urlbarView',
-          '#urlbar-results',
-          '.urlbarView-body-outer',
-          '#PopupAutoCompleteRichResult',
-        ];
-        const positionedEls = new Set();
-        const savedStyles = new Map();
-
-        const positionPopup = () => {
-          for (const sel of POPUP_SELECTORS) {
-            const el = document.querySelector(sel);
-            if (el && el.offsetParent !== null && el.offsetHeight > 0) {
-              if (!positionedEls.has(el)) {
-                // Save original inline styles so we can restore on cleanup
-                savedStyles.set(el, {
-                  position: el.style.position,
-                  top: el.style.top,
-                  left: el.style.left,
-                  width: el.style.width,
-                  zIndex: el.style.zIndex,
-                });
-                log('found popup element:', sel, el);
-              }
-              const rect = field.getBoundingClientRect();
-              el.style.position = 'fixed';
-              el.style.top = (rect.bottom + 2) + 'px';
-              el.style.left = rect.left + 'px';
-              el.style.width = rect.width + 'px';
-              el.style.zIndex = '100';
-              positionedEls.add(el);
-              return el;
-            }
-          }
-          return null;
-        };
-
-        // The popup may not exist in the DOM yet — watch for it to appear
-        // via MutationObserver on #urlbar (attrs + children). Also poll
-        // a few times to catch cases the observer misses.
-        const urlbar = document.getElementById('urlbar');
-        const observer = new MutationObserver(positionPopup);
-        if (urlbar) {
-          observer.observe(urlbar, { attributes: true, subtree: true, childList: true });
-        }
-        setTimeout(positionPopup, 50);
-        setTimeout(positionPopup, 200);
-
-        // Cleanup: stop mirroring, disconnect observer, clear inline styles,
-        // restore display. Fires on urlbar blur (user navigated or clicked away).
+        // Clear the active state on blur (user navigated or cancelled).
+        // If no navigation happened, restore gURLBar.value to the current URI
+        // so the real urlbar doesn't sit with leftover typed text.
         const cleanup = () => {
-          active = false;
-          observer.disconnect();
           gURLBar.inputField.removeEventListener('blur', cleanup);
-          // Restore inline styles we set on popup elements
-          for (const el of positionedEls) {
-            const saved = savedStyles.get(el) || {};
-            el.style.position = saved.position || '';
-            el.style.top      = saved.top      || '';
-            el.style.left     = saved.left     || '';
-            el.style.width    = saved.width    || '';
-            el.style.zIndex   = saved.zIndex   || '';
-          }
-          log('cleanup — restored', positionedEls.size, 'popup element(s)');
-          // Delay display restore so navigation can complete first
           setTimeout(() => {
+            field.removeAttribute('data-active');
             const nowUri = gBrowser.currentURI.spec;
-            showDisplay(nowUri);
-            // If no navigation happened, gURLBar may still show the typed
-            // search text — restore it to the current URL so the real
-            // urlbar doesn't look "empty" after cancel.
             if (nowUri === startUri && gURLBar.value !== nowUri) {
               gURLBar.value = nowUri;
-              log('restored gURLBar.value after cancel');
             }
           }, 100);
         };
