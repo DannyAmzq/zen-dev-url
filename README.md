@@ -114,12 +114,11 @@ After that, follow the one-time prompt to enable `toolkit.legacyUserProfileCusto
 
 ---
 
-### Windows — PowerShell
+### Windows
 
-Right-click `install.ps1` → **Run with PowerShell**, or from a PowerShell terminal:
+Double-click **`install.bat`** — it handles execution policy automatically. Or from a PowerShell terminal:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass
 .\install.ps1
 ```
 
@@ -135,30 +134,23 @@ Zen Browser ships for Linux in three forms — the install experience differs pe
 
 ---
 
-#### Flatpak *(most common on modern distros)*
+#### Flatpak *(most common on modern distros — partial support)*
 
 ```bash
 bash install.sh
 ```
 
-The script detects the Flatpak install automatically (app ID: `app.zen_browser.zen`) and copies the userscript and CSS into your profile. **However**, the Flatpak app bundle is read-only, so fx-autoconfig's program files (`config.js`) cannot be written there automatically.
+The script auto-detects the Flatpak install (app ID: `app.zen_browser.zen`) and installs:
 
-You need to install fx-autoconfig's profile side manually:
+- ✅ The userscript (to `chrome/JS/`)
+- ✅ The CSS (to `userChrome.css`)
+- ✅ fx-autoconfig's **profile-side** utils (to `chrome/utils/`) — auto-installed from the vendored copy since v20260415-2
 
-```bash
-# Download fx-autoconfig
-curl -fsSL https://github.com/MrOtherGuy/fx-autoconfig/archive/refs/heads/master.zip \
-  -o /tmp/fx-autoconfig.zip
-unzip -q /tmp/fx-autoconfig.zip -d /tmp/fxac
+**What's still manual:** the Flatpak app bundle is a read-only squashfs, so fx-autoconfig's **program-side** files (`config.js`, `config-prefs.js`) can't be placed inside it by any installer. Without those two files the mod does not load.
 
-# Find your profile (path printed by install.sh)
-PROFILE="$HOME/.var/app/app.zen_browser.zen/zen/<your-profile>"
+The installer will print a red `⚠ INSTALL INCOMPLETE` box at the end explaining this — it no longer falsely reports success.
 
-mkdir -p "$PROFILE/chrome/utils"
-cp -r /tmp/fxac/fx-autoconfig-master/profile/chrome/utils/. "$PROFILE/chrome/utils/"
-```
-
-> The program-side `config.js` for Flatpak requires a Flatpak override. Until the Flatpak maintainers add an official hook, the cleanest workaround is to use the **tarball install** instead.
+> **Recommended workaround:** switch to the tarball install of Zen (see next section). The Flatpak path can't be fully fixed without upstream Flatpak maintainer buy-in for a `config.js` override hook.
 
 ---
 
@@ -210,25 +202,19 @@ sudo bash install.sh
 
 ### Windows — WSL (Ubuntu)
 
-Open a WSL terminal inside this repo's directory. The snippet loops over every installed Zen channel (release/beta/twilight) it finds in `profiles.ini`, so multi-channel users don't have to target one by hand.
+Open a WSL terminal inside this repo's directory:
 
 ```bash
-WINUSER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
-ZEN="/mnt/c/Users/$WINUSER/AppData/Roaming/zen"
-
-while IFS= read -r PROFILE; do
-  CHROME="$ZEN/$PROFILE/chrome"
-  echo "→ $(basename "$PROFILE")"
-  cp zen-dev-url-detector.uc.js "$CHROME/JS/" && echo "  JS OK" || echo "  JS FAILED"
-  sed -i '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css"
-  { printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css" && echo "  CSS OK" || echo "  CSS FAILED"
-done < <(awk '/^\[Install/{f=1;next} /^\[/{f=0} f && /^Default=Profiles\//{print substr($0,9)}' \
-  "$ZEN/profiles.ini" | tr -d '\r')
+bash install.sh
 ```
 
-Then **fully quit and reopen Zen** (File → Quit, not just close window).
+`install.sh` detects WSL automatically (via `/proc/version`), resolves your Windows username through `cmd.exe`, and targets the Zen install on the Windows side at `%APPDATA%\zen`. It also installs fx-autoconfig's program files into `%PROGRAMFILES%\Zen Browser\` (or `%LOCALAPPDATA%\zen\`) — the same files `install.ps1` handles for native PowerShell.
 
-> **Tip:** this same snippet doubles as your update command — run it any time you pull new changes and restart Zen.
+Multi-channel users don't need to do anything extra — the installer iterates every `Install{hash}` section in `profiles.ini` and installs to all detected channels (release/beta/twilight).
+
+> **Note:** if Zen is installed under `%PROGRAMFILES%\Zen Browser\`, the installer may need Windows Administrator to write `config.js` there. If the check fails it will tell you to either re-launch WSL elevated, or just use `install.ps1` on the PowerShell side instead.
+
+Then **fully quit and reopen Zen** (File → Quit, not just close window).
 
 ---
 
@@ -267,26 +253,39 @@ git pull && bash install.sh
 
 ### WSL
 ```bash
-git pull && {
-  WINUSER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
-  ZEN="/mnt/c/Users/$WINUSER/AppData/Roaming/zen"
-  while IFS= read -r PROFILE; do
-    CHROME="$ZEN/$PROFILE/chrome"
-    echo "→ $(basename "$PROFILE")"
-    cp zen-dev-url-detector.uc.js "$CHROME/JS/" && echo "  JS OK" || echo "  JS FAILED"
-    sed -i '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css"
-    { printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css" && echo "  CSS OK" || echo "  CSS FAILED"
-  done < <(awk '/^\[Install/{f=1;next} /^\[/{f=0} f && /^Default=Profiles\//{print substr($0,9)}' \
-    "$ZEN/profiles.ini" | tr -d '\r')
-}
+git pull && bash install.sh
 ```
 
-Restart Zen and confirm the version number bumped in the console.
+Same as macOS / Linux — `install.sh` handles WSL natively since v20260415-3. Restart Zen and confirm the version number bumped in the console.
 
-### Windows PowerShell
+### Windows
 ```powershell
 git pull
 .\install.ps1
+```
+
+---
+
+## Installer options
+
+Both `install.sh` and `install.ps1` accept the following flags:
+
+| Flag | PowerShell | What it does |
+|---|---|---|
+| `--help` | `-Help` | Show usage and exit |
+| `--uninstall` | `-Uninstall` | Remove zen-dev-url files from all profiles |
+| `--verify` | `-Verify` | Check that the install is healthy |
+| `--dry-run` | `-DryRun` | Show what would be done, change nothing |
+
+```bash
+# Check if everything is installed correctly
+bash install.sh --verify
+
+# Remove zen-dev-url (leaves fx-autoconfig in place)
+bash install.sh --uninstall
+
+# Preview what the installer will do
+bash install.sh --dry-run
 ```
 
 ---
