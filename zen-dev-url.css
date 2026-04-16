@@ -120,13 +120,14 @@
         color-mix(in srgb, #ff6b35 35%, var(--toolbar-bgcolor));
 }
 
-/* Single contenteditable div — display and edit mode in one element */
+/* URL field — display mode shows styled protocol/host, click redirects
+   to the real urlbar for full autocomplete. */
 #zen-dev-url-field {
     flex: 1;
     min-width: 0;
     padding: 4px 8px;
     border-radius: 4px;
-    background: color-mix(in srgb, #ff6b35 12%, var(--toolbar-bgcolor));
+    background: rgba(0, 0, 0, 0.35);
     font-size: 13px;
     font-family: monospace !important;
     line-height: 1.4;
@@ -140,20 +141,33 @@
 }
 
 #zen-dev-url-field:hover {
-    background: color-mix(in srgb, #ff6b35 16%, var(--toolbar-bgcolor));
+    background: rgba(0, 0, 0, 0.42);
 }
 
-#zen-dev-url-field[contenteditable="true"] {
+/* Active state: focus has been redirected to the real urlbar */
+#zen-dev-url-field[data-active] {
     cursor: text;
     outline-color: rgba(255, 107, 53, 0.75);
-    /* Let the caret scroll into view while editing long URLs —
-       display mode clips via overflow:hidden, edit mode scrolls. */
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
+    background: rgba(0, 0, 0, 0.5);
 }
-#zen-dev-url-field[contenteditable="true"]::-webkit-scrollbar {
-    display: none;
+
+/* Reposition the real urlbar dropdown under our banner field when the
+   search was initiated from the banner (zen-dev-url-search attribute). */
+:root[zen-dev-url-search] #urlbar[breakout-extend] .urlbarView {
+    position: fixed !important;
+    top: var(--zen-dev-url-popup-top) !important;
+    left: var(--zen-dev-url-popup-left) !important;
+    width: var(--zen-dev-url-popup-width) !important;
+    z-index: 100 !important;
+}
+
+/* Also try the non-breakout state */
+:root[zen-dev-url-search] #urlbar[open] .urlbarView {
+    position: fixed !important;
+    top: var(--zen-dev-url-popup-top) !important;
+    left: var(--zen-dev-url-popup-left) !important;
+    width: var(--zen-dev-url-popup-width) !important;
+    z-index: 100 !important;
 }
 
 .zen-dev-url-protocol {
