@@ -145,32 +145,18 @@
     background: rgba(0, 0, 0, 0.42);
 }
 
-/* Active state: focus has been redirected to the real urlbar for
-   autocomplete. A CSS caret animation makes the banner feel like
-   the primary typing target even though gURLBar has real focus. */
+/* Active state: the real #urlbar is visually positioned over our field
+   slot (we hide the slot via visibility:hidden during edit). */
 #zen-dev-url-field[data-active] {
     cursor: text;
+}
+
+/* While the real urlbar is repositioned into our banner, retheme it
+   with the dev-orange accents so it reads as the "dev URL bar". */
+:root[zen-dev-url-search] #urlbar .urlbar-background {
     outline: 2px solid #ff6b35 !important;
-    background: rgba(0, 0, 0, 0.55);
-}
-
-#zen-dev-url-field[data-active]::after {
-    content: '';
-    display: inline-block;
-    width: 1.5px;
-    height: 1em;
-    background: #fff;
-    margin-left: 1px;
-    vertical-align: text-bottom;
-    animation: zen-dev-url-blink 1s step-end infinite;
-}
-
-@keyframes zen-dev-url-blink {
-    50% { opacity: 0; }
-}
-
-#zen-dev-url-field.zen-dev-url-placeholder {
-    color: rgba(255, 255, 255, 0.3);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, #ff6b35 12%, var(--toolbar-bgcolor)) !important;
 }
 
 .zen-dev-url-protocol {
