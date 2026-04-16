@@ -5,30 +5,36 @@ memory, so things that need picking up later get written here.
 
 ## Open
 
-### Manual — for Danny
-- [ ] **Create a GitHub Projects board** for the install-UX audit work.
-  Projects can't be created via the MCP toolkit, so this has to be done
-  through the web UI at `github.com/DannyAmzq/zen-dev-url/projects`. Drag
-  in issues #8–#14 once created. Tracking issue #15 already groups them
-  via sub-issues as an interim measure.
+### Feature work
+- [ ] **#20 — Banner URL field: real urlbar autocomplete.** Replace the custom
+  contenteditable div with a bridge to the real Firefox urlbar. Research done
+  (Option 1: bridge integration recommended). Also fix URL field opacity on
+  Windows. See issue #20 for full plan.
+- [ ] **Stale PRs to close:** #7 (Copilot audit PR, superseded by #19),
+  #16 (duplicate targeting main), #17 and #18 (cloudyun888 — obsolete).
 
-### Testing needed before merging `claude/copilot-installation-issues-ybaYQ`
-
-The three high-severity install-UX fixes landed on the branch but were
-not verifiable from Claude's sandbox. Before merging into `dev`:
-
-- [ ] **macOS** — `bash install.sh` still completes cleanly, banner appears.
-- [ ] **Linux tarball** — same.
-- [ ] **Linux Flatpak** — new red `⚠ INSTALL INCOMPLETE` box prints instead
-  of the old green "complete!". Profile utils end up in
-  `~/.var/app/app.zen_browser.zen/zen/<profile>/chrome/utils/`. Exit code 0.
-- [ ] **Windows WSL** — `bash install.sh` now works end-to-end without the
-  old 10-line README snippet. Tests the new WSL detection block at
-  `install.sh:39-74`.
-- [ ] **Windows PowerShell** — `install.ps1` still works with the vendored
-  fx-autoconfig (no more `Invoke-WebRequest`).
+### Long-term research
+- [ ] **#21 — Zen Mods JS support.** File a feature request on
+  `zen-browser/desktop` proposing a `script` field in the Zen Mods format.
+  Research confirmed fx-autoconfig is unavoidable — Zen Mods are CSS-only,
+  WebExtensions can't access chrome APIs, no built-in userChrome.js loader.
 
 ## Completed (latest first)
+
+### 2026-04-16
+- Merged PR #19 into `dev` — all install-UX fixes.
+- **#11 + #14** — Added CLI flags to both installers: `--help`, `--uninstall`,
+  `--verify`, `--dry-run`. Commit `e02a06d`.
+- **#12** — Created `install.bat` wrapper for double-click Windows install.
+  Commit `e02a06d`.
+- **#8** — Closed as not planned (vendoring eliminated curl/unzip deps).
+- **#13 long-term research** — All alternatives evaluated (Zen Mods, WebExtension,
+  built-in userChrome.js, enterprise policies). All dead ends. fx-autoconfig
+  unavoidable for current feature set. Filed issue #21.
+- Fixed WSL write-check bug (too eager when config.js already present).
+  Commit `2c8d322`.
+- Danny created GitHub Projects board.
+- Added authorship policy to CLAUDE.md.
 
 ### 2026-04-15
 - Close-out: deleted `create-audit-issues.sh`, linked issues #8–#14 from
@@ -45,11 +51,10 @@ not verifiable from Claude's sandbox. Before merging into `dev`:
   `bash install.sh` instead of copy-pasting a 10-line snippet. Commit
   `c4fb8ed`.
 
-## Deferred
-
-- **#13 long-term** — Investigate packaging as a WebExtension (`.xpi`) or
-  using Zen's native mod system to eliminate fx-autoconfig entirely. Large
-  scope, likely multi-day research + rewrite.
-- Remaining medium-severity issues: #8 (curl/unzip check — largely obviated
-  by vendoring but worth keeping as a sanity check), #11 (--uninstall /
-  --verify flags), #12 (install.bat wrapper), #14 (--help / --dry-run).
+### Verified
+- [x] **WSL** — `bash install.sh` end-to-end, 2 channels (beta + twilight).
+- [x] **WSL --verify** — 8/9 passed (twilight missing about:config pref, expected).
+- [x] **Flatpak (Docker mock)** — red INSTALL INCOMPLETE box, exit 0.
+- [x] **Tarball (Docker mock)** — green "Installation complete!"
+- [ ] **macOS** — untested (low risk, only change is vendored source).
+- [ ] **Windows PowerShell** — untested (low risk, same change).
