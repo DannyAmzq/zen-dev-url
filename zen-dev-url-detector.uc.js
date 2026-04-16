@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260416-1';
+  const ZEN_DEV_URL_VERSION = '20260416-2';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -164,16 +164,16 @@
       const banner = document.createXULElement('hbox');
       banner.id = 'zen-dev-url-banner';
 
-      // Single contenteditable div — always the same element so text never
-      // shifts position. Shows styled protocol/host HTML in display mode;
-      // switches to plain editable text on mousedown.
+      // URL field — shows styled protocol/host in display mode.
+      // Clicking redirects focus to the real urlbar for full autocomplete
+      // (history, bookmarks, "Switch to Tab", search suggestions).
       const field = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
       field.id = 'zen-dev-url-field';
-      field.setAttribute('contenteditable', 'false');
       field.spellcheck = false;
 
       const showDisplay = (spec) => {
-        field.setAttribute('contenteditable', 'false');
+        field.removeAttribute('data-active');
+        document.documentElement.removeAttribute('zen-dev-url-search');
         const match = spec.match(/^((?:https?|file):\/\/\/?)(.*)/);
         field.innerHTML = '';
         if (match) {
@@ -190,66 +190,49 @@
         }
       };
 
-      // Switch to plain text on mousedown so the browser positions the cursor
-      // at the exact click point within the now-plain content.
-      field.addEventListener('mousedown', () => {
-        if (field.getAttribute('contenteditable') === 'false') {
-          field.textContent = gBrowser.currentURI.spec;
-          field.setAttribute('contenteditable', 'true');
-        }
-      });
-      // Arrow / Home / End keys on the editable field leak to Firefox's
-       // toolbar-keynav (focusout chain shows `toolbartabstop` before urlbar
-       // steals focus). Chrome sys-capture listeners run before ours and
-       // stopImmediatePropagation there doesn't help — we never get called.
-       // Fix: in capture phase on the field itself, do the caret move by hand
-       // via Selection.modify(), then preventDefault + stopImmediatePropagation
-       // so no chrome layer ever sees the arrow.
-       const NAV = {
-         ArrowLeft:  ['backward', 'character'],
-         ArrowRight: ['forward',  'character'],
-         ArrowUp:    ['backward', 'lineboundary'],
-         ArrowDown:  ['forward',  'lineboundary'],
-         Home:       ['backward', 'lineboundary'],
-         End:        ['forward',  'lineboundary'],
-       };
-       field.addEventListener('keydown', (e) => {
-         if (field.getAttribute('contenteditable') !== 'true') return;
-         const spec = NAV[e.key];
-         if (!spec) return;
-         if (e.ctrlKey || e.metaKey) return;   // preserve Ctrl/Cmd-Home/End etc.
-         const sel = window.getSelection();
-         if (sel && sel.rangeCount && field.contains(sel.anchorNode)) {
-           try { sel.modify(e.shiftKey ? 'extend' : 'move', spec[0], spec[1]); }
-           catch (err) { console.error('[zen-dev-url] sel.modify failed:', err); }
-         }
-         e.preventDefault();
-         e.stopImmediatePropagation();
-       }, { capture: true });
+      // Click: redirect focus to the real urlbar for full autocomplete.
+      // Our field mirrors gURLBar's text, and CSS repositions the dropdown
+      // popup under our banner field via custom properties.
+      field.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
 
-      field.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          const val = field.textContent.trim();
-          if (val) {
-            gURLBar.value = val;
-            gURLBar.handleCommand();
-          }
-          field.blur();
-        } else if (e.key === 'Escape') {
-          showDisplay(gBrowser.currentURI.spec);
-          field.blur();
-        }
+        // Set CSS vars so the popup repositions under our field
+        const rect = field.getBoundingClientRect();
+        const root = document.documentElement;
+        root.style.setProperty('--zen-dev-url-popup-top', rect.bottom + 'px');
+        root.style.setProperty('--zen-dev-url-popup-left', rect.left + 'px');
+        root.style.setProperty('--zen-dev-url-popup-width', rect.width + 'px');
+        root.setAttribute('zen-dev-url-search', '');
+
+        field.setAttribute('data-active', '');
+
+        // Focus real urlbar, populate with current URL, select all
+        gURLBar.value = gBrowser.currentURI.spec;
+        gURLBar.select();
+
+        // Mirror gURLBar text to our field while editing
+        let active = true;
+        const mirror = () => {
+          if (!active) return;
+          field.textContent = gURLBar.value;
+          requestAnimationFrame(mirror);
+        };
+        requestAnimationFrame(mirror);
+
+        // Stop mirroring when urlbar closes
+        const cleanup = () => {
+          active = false;
+          gURLBar.inputField.removeEventListener('blur', cleanup);
+          setTimeout(() => showDisplay(gBrowser.currentURI.spec), 100);
+        };
+        gURLBar.inputField.addEventListener('blur', cleanup);
       });
-      field.addEventListener('dblclick', () => {
-        const range = document.createRange();
-        range.selectNodeContents(field);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-      });
-      field.addEventListener('blur', () => {
-        showDisplay(gBrowser.currentURI.spec);
+
+      field.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        // Select all in the real urlbar (mousedown already redirected focus)
+        try { gURLBar.inputField.select(); } catch (_) {}
       });
 
       /**
