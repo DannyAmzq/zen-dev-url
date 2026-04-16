@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260416-2';
+  const ZEN_DEV_URL_VERSION = '20260416-3';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -191,27 +191,25 @@
       };
 
       // Click: redirect focus to the real urlbar for full autocomplete.
-      // Our field mirrors gURLBar's text, and CSS repositions the dropdown
-      // popup under our banner field via custom properties.
+      // Our field mirrors gURLBar's text, and JS repositions the dropdown
+      // popup under our banner field (CSS alone can't — the popup element
+      // varies across Firefox/Zen versions and isn't known ahead of time).
       field.addEventListener('mousedown', (e) => {
         e.preventDefault();
         e.stopPropagation();
 
-        // Set CSS vars so the popup repositions under our field
-        const rect = field.getBoundingClientRect();
-        const root = document.documentElement;
-        root.style.setProperty('--zen-dev-url-popup-top', rect.bottom + 'px');
-        root.style.setProperty('--zen-dev-url-popup-left', rect.left + 'px');
-        root.style.setProperty('--zen-dev-url-popup-width', rect.width + 'px');
-        root.setAttribute('zen-dev-url-search', '');
+        const DEBUG = Services.prefs.getBoolPref('zen.urlbar.dev-indicator.self-tests', false);
+        const log = (...args) => DEBUG && console.log('[zen-dev-url:bridge]', ...args);
 
         field.setAttribute('data-active', '');
+        document.documentElement.setAttribute('zen-dev-url-search', '');
 
-        // Focus real urlbar, populate with current URL, select all
-        gURLBar.value = gBrowser.currentURI.spec;
+        const startUri = gBrowser.currentURI.spec;
+        gURLBar.value = startUri;
         gURLBar.select();
+        log('opened, focused gURLBar with', startUri);
 
-        // Mirror gURLBar text to our field while editing
+        // Mirror gURLBar value to our field
         let active = true;
         const mirror = () => {
           if (!active) return;
@@ -220,11 +218,85 @@
         };
         requestAnimationFrame(mirror);
 
-        // Stop mirroring when urlbar closes
+        // Position the urlbar popup under our banner field. The dropdown
+        // element varies (Zen vs Firefox vs versions), so try several
+        // candidates and use the first visible one.
+        const POPUP_SELECTORS = [
+          '#urlbar .urlbarView',
+          '#urlbar-results',
+          '.urlbarView-body-outer',
+          '#PopupAutoCompleteRichResult',
+        ];
+        const positionedEls = new Set();
+        const savedStyles = new Map();
+
+        const positionPopup = () => {
+          for (const sel of POPUP_SELECTORS) {
+            const el = document.querySelector(sel);
+            if (el && el.offsetParent !== null && el.offsetHeight > 0) {
+              if (!positionedEls.has(el)) {
+                // Save original inline styles so we can restore on cleanup
+                savedStyles.set(el, {
+                  position: el.style.position,
+                  top: el.style.top,
+                  left: el.style.left,
+                  width: el.style.width,
+                  zIndex: el.style.zIndex,
+                });
+                log('found popup element:', sel, el);
+              }
+              const rect = field.getBoundingClientRect();
+              el.style.position = 'fixed';
+              el.style.top = (rect.bottom + 2) + 'px';
+              el.style.left = rect.left + 'px';
+              el.style.width = rect.width + 'px';
+              el.style.zIndex = '100';
+              positionedEls.add(el);
+              return el;
+            }
+          }
+          return null;
+        };
+
+        // The popup may not exist in the DOM yet — watch for it to appear
+        // via MutationObserver on #urlbar (attrs + children). Also poll
+        // a few times to catch cases the observer misses.
+        const urlbar = document.getElementById('urlbar');
+        const observer = new MutationObserver(positionPopup);
+        if (urlbar) {
+          observer.observe(urlbar, { attributes: true, subtree: true, childList: true });
+        }
+        setTimeout(positionPopup, 50);
+        setTimeout(positionPopup, 200);
+
+        // Cleanup: stop mirroring, disconnect observer, clear inline styles,
+        // restore display. Fires on urlbar blur (user navigated or clicked away).
         const cleanup = () => {
           active = false;
+          observer.disconnect();
           gURLBar.inputField.removeEventListener('blur', cleanup);
-          setTimeout(() => showDisplay(gBrowser.currentURI.spec), 100);
+          // Restore inline styles we set on popup elements
+          for (const el of positionedEls) {
+            const saved = savedStyles.get(el) || {};
+            el.style.position = saved.position || '';
+            el.style.top      = saved.top      || '';
+            el.style.left     = saved.left     || '';
+            el.style.width    = saved.width    || '';
+            el.style.zIndex   = saved.zIndex   || '';
+          }
+          log('cleanup — restored', positionedEls.size, 'popup element(s)');
+          // Delay display restore so navigation can complete first
+          setTimeout(() => {
+            const nowUri = gBrowser.currentURI.spec;
+            showDisplay(nowUri);
+            // If no navigation happened, gURLBar may still show the typed
+            // search text — restore it to the current URL so the real
+            // urlbar doesn't look "empty" after cancel.
+            if (nowUri === startUri && gURLBar.value !== nowUri) {
+              gURLBar.value = nowUri;
+              log('restored gURLBar.value after cancel');
+            }
+          }, 100);
         };
         gURLBar.inputField.addEventListener('blur', cleanup);
       });
@@ -1008,6 +1080,30 @@
     // IPv6 localhost: nsIURI.host returns '::1' (no brackets); _devHosts must
     // contain the bare form or the match silently fails for http://[::1]/ URLs.
     assert('IPv6 localhost (::1) is in _devHosts', detector._devHosts.has('::1'), true);
+
+    // URL bridge regex — the banner's showDisplay splits a URI into
+    // protocol and host+path so each can be styled independently.
+    const BRIDGE_URL_RE = /^((?:https?|file):\/\/\/?)(.*)/;
+    const bridgeSplit = (spec) => {
+      const m = spec.match(BRIDGE_URL_RE);
+      return m ? [m[1], m[2]] : null;
+    };
+    assert('bridge regex splits http proto',      bridgeSplit('http://localhost:3000/')?.[0],       'http://');
+    assert('bridge regex splits http host/path',  bridgeSplit('http://localhost:3000/')?.[1],       'localhost:3000/');
+    assert('bridge regex splits https proto',     bridgeSplit('https://example.com/a')?.[0],        'https://');
+    assert('bridge regex splits file proto',      bridgeSplit('file:///home/user/index.html')?.[0], 'file:///');
+    assert('bridge regex ignores about: URIs',    bridgeSplit('about:config'),                      null);
+    assert('bridge regex ignores chrome: URIs',   bridgeSplit('chrome://browser/content/'),         null);
+
+    // Bridge depends on gURLBar having these APIs — flag loudly if absent.
+    if (typeof gURLBar === 'undefined' || !gURLBar) {
+      fail++;
+      console.error('[zen-dev-url] FAIL: gURLBar missing — banner bridge cannot function');
+    } else {
+      assert('gURLBar.select is callable',        typeof gURLBar.select,              'function');
+      assert('gURLBar.inputField exists',         !!gURLBar.inputField,               true);
+      assert('gURLBar.handleCommand is callable', typeof gURLBar.handleCommand,       'function');
+    }
 
     const total = pass + fail;
     const status = fail === 0

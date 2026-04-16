@@ -144,30 +144,21 @@
     background: rgba(0, 0, 0, 0.42);
 }
 
-/* Active state: focus has been redirected to the real urlbar */
+/* Active state: focus has been redirected to the real urlbar for
+   autocomplete. Keep the field clearly dev-themed so the user knows
+   they're still on a dev URL even while typing. */
 #zen-dev-url-field[data-active] {
     cursor: text;
-    outline-color: rgba(255, 107, 53, 0.75);
-    background: rgba(0, 0, 0, 0.5);
-}
-
-/* Reposition the real urlbar dropdown under our banner field when the
-   search was initiated from the banner (zen-dev-url-search attribute). */
-:root[zen-dev-url-search] #urlbar[breakout-extend] .urlbarView {
-    position: fixed !important;
-    top: var(--zen-dev-url-popup-top) !important;
-    left: var(--zen-dev-url-popup-left) !important;
-    width: var(--zen-dev-url-popup-width) !important;
-    z-index: 100 !important;
-}
-
-/* Also try the non-breakout state */
-:root[zen-dev-url-search] #urlbar[open] .urlbarView {
-    position: fixed !important;
-    top: var(--zen-dev-url-popup-top) !important;
-    left: var(--zen-dev-url-popup-left) !important;
-    width: var(--zen-dev-url-popup-width) !important;
-    z-index: 100 !important;
+    outline: 2px solid #ff6b35 !important;
+    background:
+        repeating-linear-gradient(
+            -45deg,
+            transparent,
+            transparent 8px,
+            rgba(255, 107, 53, 0.18) 8px,
+            rgba(255, 107, 53, 0.18) 16px
+        ),
+        rgba(0, 0, 0, 0.55);
 }
 
 .zen-dev-url-protocol {
