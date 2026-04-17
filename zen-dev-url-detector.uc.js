@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260416-7';
+  const ZEN_DEV_URL_VERSION = '20260417-1';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -99,6 +99,7 @@
      * the dev banner DOM element.
      */
     init() {
+      this._isEditing = false;
       // Populate pref cache before any _update() / _isDevUri() calls
       this._readPrefs();
       this._createBanner();
@@ -164,15 +165,47 @@
       const banner = document.createXULElement('hbox');
       banner.id = 'zen-dev-url-banner';
 
-      // URL field — shows styled protocol/host in display mode.
-      // Clicking redirects focus to the real urlbar for full autocomplete
-      // (history, bookmarks, "Switch to Tab", search suggestions).
+      // ── Standalone URL Bar ────────────────────────────────────────
+      // Completely independent from gURLBar. Own input, own autocomplete
+      // dropdown querying the Places database, own keyboard handling.
+      // NOT linked to the real urlbar in any way.
+
+      const log = (...args) => {
+        if (Services.prefs.getBoolPref('zen.urlbar.dev-indicator.self-tests', false))
+          console.log('[zen-dev-url:urlbar]', ...args);
+      };
+
+      // Wrapper holds: display div + input + dropdown
+      const wrapper = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+      wrapper.id = 'zen-dev-url-field-wrapper';
+
+      // Display — styled protocol/host, visible when NOT editing
       const field = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
       field.id = 'zen-dev-url-field';
-      field.spellcheck = false;
 
+      // Input — real text input, visible when editing
+      const input = document.createElementNS('http://www.w3.org/1999/xhtml', 'input');
+      input.id = 'zen-dev-url-input';
+      input.type = 'text';
+      input.setAttribute('autocomplete', 'off');
+      input.spellcheck = false;
+
+      // Autocomplete dropdown
+      const dropdown = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+      dropdown.id = 'zen-dev-url-dropdown';
+
+      wrapper.appendChild(field);
+      wrapper.appendChild(input);
+      wrapper.appendChild(dropdown);
+
+      // ── State ──────────────────────────────────────────────────
+      let selectedIdx = -1;
+      let currentResults = [];
+      let debounceTimer = null;
+      let savedInputValue = '';
+
+      // ── Display mode ───────────────────────────────────────────
       const showDisplay = (spec) => {
-        field.removeAttribute('data-active');
         const match = spec.match(/^((?:https?|file):\/\/\/?)(.*)/);
         field.innerHTML = '';
         if (match) {
@@ -189,101 +222,212 @@
         }
       };
 
-      // Click: visually relocate the real #urlbar into our banner slot so
-      // the user types in the native Firefox/Zen urlbar — with real cursor,
-      // real autocomplete, real popup, real keybindings. We save the urlbar's
-      // inline style and restore it on blur; zen-dev-url-search attribute on
-      // <html> lets CSS retheme the real urlbar orange while it's "ours".
+      // ── Edit mode transitions ──────────────────────────────────
+      const enterEditMode = () => {
+        if (detector._isEditing) return;
+        detector._isEditing = true;
+        const spec = gBrowser.currentURI.spec;
+        field.style.display = 'none';
+        input.style.display = '';
+        input.value = spec;
+        savedInputValue = spec;
+        selectedIdx = -1;
+        currentResults = [];
+        dropdown.innerHTML = '';
+        dropdown.style.display = 'none';
+        requestAnimationFrame(() => { input.focus(); input.select(); });
+        log('enterEditMode:', spec);
+      };
+
+      const exitEditMode = () => {
+        if (!detector._isEditing) return;
+        detector._isEditing = false;
+        clearTimeout(debounceTimer);
+        input.style.display = 'none';
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+        field.style.display = '';
+        selectedIdx = -1;
+        currentResults = [];
+        showDisplay(gBrowser.currentURI.spec);
+        log('exitEditMode');
+      };
+      detector._exitEditMode = exitEditMode;
+
+      // ── URL detection ──────────────────────────────────────────
+      const looksLikeUrl = (str) => {
+        return /^https?:\/\//i.test(str) ||
+               /^file:\/\//i.test(str) ||
+               /^localhost(:\d+)?/i.test(str) ||
+               /^[\w-]+\.[\w.]+\/?/.test(str) ||
+               /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(str) ||
+               /^\[?::1\]?/.test(str);
+      };
+      detector._looksLikeUrl = looksLikeUrl;
+
+      // ── Navigation ─────────────────────────────────────────────
+      const navigateTo = (value, type) => {
+        log('navigateTo:', value, 'type:', type);
+        exitEditMode();
+        const principal = Services.scriptSecurityManager.getSystemPrincipal();
+        try {
+          if (type === 'search') {
+            Services.search.getDefault().then(engine => {
+              const sub = engine.getSubmission(value);
+              if (sub) {
+                gBrowser.fixupAndLoadURIString(sub.uri.spec, { triggeringPrincipal: principal });
+              }
+            }).catch(err => console.error('[zen-dev-url] search failed:', err));
+          } else {
+            gBrowser.fixupAndLoadURIString(value, { triggeringPrincipal: principal });
+          }
+        } catch (err) {
+          console.error('[zen-dev-url] navigation failed:', err);
+        }
+      };
+
+      // ── Autocomplete (Places DB) ──────────────────────────────
+      const queryPlaces = async (query) => {
+        if (!query || query.length < 2) {
+          dropdown.style.display = 'none';
+          dropdown.innerHTML = '';
+          currentResults = [];
+          return;
+        }
+        log('queryPlaces:', query);
+        try {
+          const { PlacesUtils } = ChromeUtils.importESModule(
+            'resource://gre/modules/PlacesUtils.sys.mjs'
+          );
+          const db = await PlacesUtils.promiseDBConnection();
+          const escaped = query
+            .replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+          const rows = await db.executeCached(`
+            SELECT url, COALESCE(title, '') AS title
+            FROM moz_places
+            WHERE (url LIKE :q ESCAPE '\\' OR title LIKE :q ESCAPE '\\')
+              AND hidden = 0 AND frecency > 0
+            ORDER BY frecency DESC LIMIT 8
+          `, { q: '%' + escaped + '%' });
+          currentResults = rows.map(r => ({
+            url: r.getResultByName('url'),
+            title: r.getResultByName('title'),
+          }));
+          log('queryPlaces: got', currentResults.length, 'results');
+        } catch (err) {
+          log('queryPlaces error:', err);
+          currentResults = [];
+        }
+        renderDropdown(query);
+      };
+
+      // ── Dropdown rendering ─────────────────────────────────────
+      const makeItem = (value, title, subtitle, type) => {
+        const item = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+        item.className = 'zen-dev-url-dropdown-item';
+        item.dataset.value = value || '';
+        item.dataset.type = type || 'visit';
+        const t = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+        t.className = 'zen-dev-url-dropdown-title';
+        t.textContent = title;
+        item.appendChild(t);
+        if (subtitle && subtitle !== title) {
+          const u = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+          u.className = 'zen-dev-url-dropdown-url';
+          u.textContent = subtitle;
+          item.appendChild(u);
+        }
+        item.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          navigateTo(value || input.value, type);
+        });
+        return item;
+      };
+
+      const renderDropdown = (query) => {
+        dropdown.innerHTML = '';
+        selectedIdx = -1;
+        if (looksLikeUrl(query)) {
+          dropdown.appendChild(makeItem(query, query + ' — Visit', null, 'visit'));
+        }
+        for (const r of currentResults) {
+          dropdown.appendChild(makeItem(r.url, r.title || r.url, r.url, 'history'));
+        }
+        let searchLabel = 'Search';
+        try {
+          const e = Services.search.defaultEngine;
+          if (e) searchLabel = 'Search with ' + e.name;
+        } catch {}
+        if (!looksLikeUrl(query)) {
+          dropdown.appendChild(makeItem(query, query + ' — ' + searchLabel, null, 'search'));
+        }
+        dropdown.style.display = dropdown.children.length > 0 ? '' : 'none';
+        log('renderDropdown:', dropdown.children.length, 'items');
+      };
+
+      const updateSelection = () => {
+        const items = dropdown.querySelectorAll('.zen-dev-url-dropdown-item');
+        items.forEach((el, i) => {
+          el.classList.toggle('zen-dev-url-dropdown-selected', i === selectedIdx);
+        });
+        if (selectedIdx >= 0 && items[selectedIdx]) {
+          input.value = items[selectedIdx].dataset.value;
+        } else {
+          input.value = savedInputValue;
+        }
+      };
+
+      // ── Event handlers ─────────────────────────────────────────
       field.addEventListener('mousedown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-
-        const urlbar = document.getElementById('urlbar');
-        if (!urlbar) return;
-        // Guard against re-entry if cleanup is pending
-        if (urlbar.dataset.zenDevUrlActive) return;
-        urlbar.dataset.zenDevUrlActive = '1';
-
-        field.setAttribute('data-active', '');
-        document.documentElement.setAttribute('zen-dev-url-search', '');
-
-        // Save original inline style attribute for clean restore.
-        const savedStyle = urlbar.getAttribute('style') || '';
-
-        // Position the real urlbar over our field slot. Use fixed positioning
-        // so parent stacking/overflow can't clip it.
-        const reposition = () => {
-          const rect = field.getBoundingClientRect();
-          urlbar.style.setProperty('position', 'fixed', 'important');
-          urlbar.style.setProperty('top', rect.top + 'px', 'important');
-          urlbar.style.setProperty('left', rect.left + 'px', 'important');
-          urlbar.style.setProperty('width', rect.width + 'px', 'important');
-          urlbar.style.setProperty('min-width', rect.width + 'px', 'important');
-          urlbar.style.setProperty('max-width', rect.width + 'px', 'important');
-          urlbar.style.setProperty('height', rect.height + 'px', 'important');
-          urlbar.style.setProperty('z-index', '100', 'important');
-          urlbar.style.setProperty('visibility', 'visible', 'important');
-          urlbar.style.setProperty('opacity', '1', 'important');
-          urlbar.style.setProperty('display', 'flex', 'important');
-          urlbar.style.setProperty('margin', '0', 'important');
-        };
-        reposition();
-
-        // Hide our display slot while the real urlbar occupies its space
-        field.style.visibility = 'hidden';
-
-        // Focus + select the real urlbar
-        const startUri = gBrowser.currentURI.spec;
-        try {
-          gURLBar.focus();
-          gURLBar.value = startUri;
-          gURLBar.select();
-        } catch (err) {
-          console.error('[zen-dev-url] urlbar focus failed:', err);
-        }
-
-        // Keep the urlbar anchored to our field if the window/sidebar resizes
-        let rafPending = false;
-        const onResize = () => {
-          if (rafPending) return;
-          rafPending = true;
-          requestAnimationFrame(() => {
-            rafPending = false;
-            reposition();
-          });
-        };
-        window.addEventListener('resize', onResize);
-        const tabpanels = document.getElementById('tabbrowser-tabpanels');
-        let ro = null;
-        if (tabpanels && typeof ResizeObserver === 'function') {
-          ro = new ResizeObserver(onResize);
-          ro.observe(tabpanels);
-        }
-
-        const cleanup = () => {
-          gURLBar.inputField.removeEventListener('blur', cleanup);
-          window.removeEventListener('resize', onResize);
-          if (ro) ro.disconnect();
-          // Delay so navigation (which also blurs) completes first
-          setTimeout(() => {
-            // Restore inline style attribute verbatim
-            if (savedStyle) urlbar.setAttribute('style', savedStyle);
-            else urlbar.removeAttribute('style');
-            delete urlbar.dataset.zenDevUrlActive;
-            document.documentElement.removeAttribute('zen-dev-url-search');
-            field.style.visibility = '';
-            field.removeAttribute('data-active');
-            const nowUri = gBrowser.currentURI.spec;
-            showDisplay(nowUri);
-          }, 80);
-        };
-        gURLBar.inputField.addEventListener('blur', cleanup);
+        enterEditMode();
       });
 
-      field.addEventListener('dblclick', (e) => {
-        e.preventDefault();
-        // Select all in the real urlbar (mousedown already redirected focus)
-        try { gURLBar.inputField.select(); } catch (_) {}
+      dropdown.addEventListener('mousedown', (e) => e.preventDefault());
+
+      input.addEventListener('input', () => {
+        savedInputValue = input.value;
+        selectedIdx = -1;
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => queryPlaces(input.value.trim()), 150);
+      });
+
+      input.addEventListener('keydown', (e) => {
+        const items = dropdown.querySelectorAll('.zen-dev-url-dropdown-item');
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (items.length > 0) {
+            selectedIdx = Math.min(selectedIdx + 1, items.length - 1);
+            updateSelection();
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          selectedIdx = Math.max(selectedIdx - 1, -1);
+          updateSelection();
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          const val = input.value.trim();
+          if (!val) return;
+          if (selectedIdx >= 0 && items[selectedIdx]) {
+            navigateTo(items[selectedIdx].dataset.value || val, items[selectedIdx].dataset.type);
+          } else {
+            navigateTo(val, looksLikeUrl(val) ? 'visit' : 'search');
+          }
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          exitEditMode();
+        } else if (e.key === 'Tab') {
+          exitEditMode();
+        }
+      });
+
+      input.addEventListener('blur', () => {
+        setTimeout(() => {
+          if (detector._isEditing && document.activeElement !== input) {
+            exitEditMode();
+          }
+        }, 150);
       });
 
       /**
@@ -420,8 +564,8 @@
       const viewportEl = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
       viewportEl.id = 'zen-dev-url-viewport';
 
-      // Layout: [field] [copy] | sep | [clear-data] [reload] | sep | [screenshot] [inspector] [console] [network] | sep | [viewport] | sep | [gear]
-      banner.appendChild(field);
+      // Layout: [wrapper(field+input+dropdown)] [copy] | sep | [clear-data] [reload] | sep | [screenshot] [inspector] [console] [network] | sep | [viewport] | sep | [gear]
+      banner.appendChild(wrapper);
       banner.appendChild(copyBtn);
       banner.appendChild(makeSeparator());
       banner.appendChild(clearSiteData);
@@ -546,8 +690,11 @@
       const excluded = this._excludedBrowsers.has(browser);
       const isDev = this._prefs?.enabled && ((this._isDevUri(currentUri) && !excluded) || forced);
       document.documentElement.toggleAttribute('zen-dev-url', isDev);
+      if (!isDev && this._isEditing && this._exitEditMode) {
+        this._exitEditMode();
+      }
       if (isDev && currentUri) {
-        if (this._field && !this._field.hasAttribute('data-active')) {
+        if (this._field && !this._isEditing) {
           this._showDisplay(currentUri.spec);
         }
         this._updateViewport();
@@ -1074,14 +1221,30 @@
     assert('bridge regex ignores about: URIs',    bridgeSplit('about:config'),                      null);
     assert('bridge regex ignores chrome: URIs',   bridgeSplit('chrome://browser/content/'),         null);
 
-    // Bridge depends on gURLBar having these APIs — flag loudly if absent.
-    if (typeof gURLBar === 'undefined' || !gURLBar) {
+    // Navigation API — our standalone URL bar uses fixupAndLoadURIString
+    assert('gBrowser.fixupAndLoadURIString exists', typeof gBrowser.fixupAndLoadURIString, 'function');
+
+    // Standalone URL bar: looksLikeUrl
+    if (detector._looksLikeUrl) {
+      assert('looksLikeUrl: http',       detector._looksLikeUrl('http://localhost:3000'),  true);
+      assert('looksLikeUrl: https',      detector._looksLikeUrl('https://example.com'),    true);
+      assert('looksLikeUrl: localhost',   detector._looksLikeUrl('localhost:8080'),          true);
+      assert('looksLikeUrl: domain',      detector._looksLikeUrl('example.com/path'),       true);
+      assert('looksLikeUrl: IP',          detector._looksLikeUrl('192.168.1.1:3000'),       true);
+      assert('looksLikeUrl: IPv6',        detector._looksLikeUrl('[::1]:8080'),              true);
+      assert('looksLikeUrl: file',        detector._looksLikeUrl('file:///tmp/test.html'),   true);
+      assert('looksLikeUrl: query no',    detector._looksLikeUrl('how to fix bug'),          false);
+      assert('looksLikeUrl: word no',     detector._looksLikeUrl('hello'),                   false);
+    }
+
+    // PlacesUtils — our autocomplete queries the Places DB directly
+    try {
+      const { PlacesUtils } = ChromeUtils.importESModule('resource://gre/modules/PlacesUtils.sys.mjs');
+      assert('PlacesUtils imported',                 !!PlacesUtils,                            true);
+      assert('PlacesUtils.promiseDBConnection exists', typeof PlacesUtils.promiseDBConnection, 'function');
+    } catch (e) {
       fail++;
-      console.error('[zen-dev-url] FAIL: gURLBar missing — banner bridge cannot function');
-    } else {
-      assert('gURLBar.select is callable',        typeof gURLBar.select,              'function');
-      assert('gURLBar.inputField exists',         !!gURLBar.inputField,               true);
-      assert('gURLBar.handleCommand is callable', typeof gURLBar.handleCommand,       'function');
+      console.error('[zen-dev-url] FAIL: PlacesUtils import failed:', e);
     }
 
     const total = pass + fail;

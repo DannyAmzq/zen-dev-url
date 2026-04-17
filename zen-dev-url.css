@@ -120,11 +120,15 @@
         rgba(45, 18, 8, 0.95);
 }
 
-/* URL field — display mode shows styled protocol/host, click redirects
-   to the real urlbar for full autocomplete. */
-#zen-dev-url-field {
+/* URL bar wrapper — holds display, input, and autocomplete dropdown */
+#zen-dev-url-field-wrapper {
     flex: 1;
     min-width: 0;
+    position: relative;
+}
+
+/* Display mode — styled protocol/host, visible when NOT editing */
+#zen-dev-url-field {
     min-height: 24px;
     padding: 4px 8px;
     border-radius: 4px;
@@ -145,18 +149,81 @@
     background: rgba(0, 0, 0, 0.42);
 }
 
-/* Active state: the real #urlbar is visually positioned over our field
-   slot (we hide the slot via visibility:hidden during edit). */
-#zen-dev-url-field[data-active] {
-    cursor: text;
+/* Edit input — replaces display when typing */
+#zen-dev-url-input {
+    display: none;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 24px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: none;
+    background: rgba(0, 0, 0, 0.5);
+    font-size: 13px;
+    font-family: monospace !important;
+    line-height: 1.4;
+    letter-spacing: 0;
+    color: #ffffff;
+    outline: 2px solid #ff6b35;
+    caret-color: #ff6b35;
+    appearance: none !important;
+    -moz-appearance: none !important;
 }
 
-/* While the real urlbar is repositioned into our banner, retheme it
-   with the dev-orange accents so it reads as the "dev URL bar". */
-:root[zen-dev-url-search] #urlbar .urlbar-background {
-    outline: 2px solid #ff6b35 !important;
-    outline-offset: -2px;
-    background-color: color-mix(in srgb, #ff6b35 12%, var(--toolbar-bgcolor)) !important;
+#zen-dev-url-input::selection {
+    background: rgba(255, 107, 53, 0.4);
+    color: #fff;
+}
+
+/* Autocomplete dropdown */
+#zen-dev-url-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    background: rgba(20, 18, 16, 0.97);
+    border: 1.5px solid rgba(255, 107, 53, 0.6);
+    border-radius: 8px;
+    padding: 4px 0;
+    max-height: 400px;
+    overflow-y: auto;
+    z-index: 10000;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 107, 53, 0.3) transparent;
+}
+
+.zen-dev-url-dropdown-item {
+    display: flex;
+    flex-direction: column;
+    padding: 6px 12px;
+    gap: 2px;
+    cursor: pointer;
+    transition: background 0.08s ease;
+}
+
+.zen-dev-url-dropdown-item:hover,
+.zen-dev-url-dropdown-selected {
+    background: rgba(255, 107, 53, 0.18);
+}
+
+.zen-dev-url-dropdown-title {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.zen-dev-url-dropdown-url {
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 11px;
+    font-family: monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .zen-dev-url-protocol {
