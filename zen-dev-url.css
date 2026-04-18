@@ -470,12 +470,42 @@
     transition: background 0.12s ease;
 }
 
+.zen-dev-url-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .zen-dev-url-action-btn:hover {
     background: rgba(255, 107, 53, 0.32) !important;
 }
 
 .zen-dev-url-action-btn:active {
     transform: scale(0.98);
+}
+
+/* Icon rendered via mask-image (inline style on the span) so the SVG
+   inherits our orange tint instead of shipping its own colors. */
+.zen-dev-url-action-icon {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    background-color: rgba(255, 255, 255, 0.85);
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+    -webkit-mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+}
+
+.zen-dev-url-action-btn:hover .zen-dev-url-action-icon {
+    background-color: #ffffff;
+}
+
+.zen-dev-url-action-label {
+    flex: 1;
+    text-align: left;
 }
 
 /* DevTools panel select dropdown in settings */
