@@ -440,15 +440,20 @@ for PROFILE_DIR in "${PROFILE_DIRS[@]}"; do
   cp "$SCRIPT_DIR/zen-dev-url-detector.uc.js" "$JS_DIR/"
   success "Copied userscript to $JS_DIR"
 
-  # CSS (idempotent)
+  # CSS — always refresh. If an existing zen-dev-url block is present,
+  # strip everything from the marker to EOF and re-append, so re-running
+  # install.sh picks up CSS changes (icons, stripe colors, etc). Without
+  # this, users who installed once and then `git pull`'d would get JS
+  # updates but frozen CSS.
   CHROME_CSS="$PROFILE_DIR/chrome/userChrome.css"
   MARKER="/* zen-dev-url */"
   if grep -qF "$MARKER" "$CHROME_CSS" 2>/dev/null; then
-    warn "zen-dev-url styles already present in userChrome.css, skipping append."
-  else
-    { echo ""; echo "$MARKER"; cat "$SCRIPT_DIR/zen-dev-url.css"; } >> "$CHROME_CSS"
-    success "Appended styles to $CHROME_CSS"
+    _line=$(grep -nF "$MARKER" "$CHROME_CSS" | head -1 | cut -d: -f1)
+    head -n $((_line - 1)) "$CHROME_CSS" > "$CHROME_CSS.tmp" && mv "$CHROME_CSS.tmp" "$CHROME_CSS"
+    info "Stripped existing zen-dev-url styles before re-appending."
   fi
+  { echo ""; echo "$MARKER"; cat "$SCRIPT_DIR/zen-dev-url.css"; } >> "$CHROME_CSS"
+  success "Appended styles to $CHROME_CSS"
 
   INSTALLED=$((INSTALLED + 1))
 done
