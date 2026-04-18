@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260418-3';
+  const ZEN_DEV_URL_VERSION = '20260418-4';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -181,92 +181,85 @@
       const wrapper = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
       wrapper.id = 'zen-dev-url-field-wrapper';
 
-      const field = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+      const field = document.createElementNS('http://www.w3.org/1999/xhtml', 'input');
       field.id = 'zen-dev-url-field';
+      field.type = 'text';
       field.spellcheck = false;
+      field.autocomplete = 'off';
+      field.placeholder = 'Search or enter URL';
 
       wrapper.appendChild(field);
 
-      // Display — styled protocol/host
       const showDisplay = (spec) => {
-        const match = spec.match(/^((?:https?|file):\/\/\/?)(.*)/);
-        field.innerHTML = '';
-        if (match) {
-          const proto = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
-          proto.className = 'zen-dev-url-protocol';
-          proto.textContent = match[1];
-          const host = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
-          host.className = 'zen-dev-url-host';
-          host.textContent = match[2];
-          field.appendChild(proto);
-          field.appendChild(host);
-        } else {
-          field.textContent = spec;
-        }
+        field.value = spec;
       };
 
-      // Click: focus gURLBar so the native Zen suggestions popup opens
-      // naturally. Mirror its value back to our field so the banner reflects
-      // what the user is typing. Never touch the popup's position.
-      field.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
+      // Focus: enter edit mode. The cursor, selection, and typing all live
+      // in our input. We sync our value to gURLBar to trigger its native
+      // autocomplete/suggestions popup alongside.
+      field.addEventListener('focus', () => {
         if (detector._isEditing) return;
         detector._isEditing = true;
         field.setAttribute('data-active', '');
-
         const startUri = gBrowser.currentURI.spec;
+        field.value = startUri;
+        field.select();
+        log('dev URL bar focused with', startUri);
+      });
+
+      // Input: sync typed value to gURLBar and trigger autocomplete search
+      field.addEventListener('input', () => {
         try {
-          gURLBar.focus();
-          gURLBar.value = startUri;
-          gURLBar.select();
-          log('focused gURLBar with', startUri);
+          gURLBar.value = field.value;
+          gURLBar.setAttribute('focused', 'true');
+          if (typeof gURLBar.startQuery === 'function') {
+            gURLBar.startQuery();
+          }
         } catch (err) {
-          console.error('[zen-dev-url] urlbar focus failed:', err);
+          log('gURLBar sync/search error:', err);
+        }
+      });
+
+      // Keydown: Enter navigates, Escape cancels
+      field.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const url = field.value.trim();
+          if (!url) return;
+          try {
+            gBrowser.fixupAndLoadURIString(url, {
+              triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+            });
+            log('navigating to', url);
+          } catch (err) {
+            console.error('[zen-dev-url] navigation failed:', err);
+          }
+          field.blur();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          field.blur();
+        }
+      });
+
+      // Blur: exit edit mode, restore display
+      field.addEventListener('blur', () => {
+        setTimeout(() => {
           field.removeAttribute('data-active');
           detector._isEditing = false;
-          return;
-        }
-
-        // Mirror gURLBar.value → field. When empty, show a placeholder so the
-        // field keeps its size (no collapse) and the user has a clear hint.
-        let active = true;
-        const mirror = () => {
-          if (!active) return;
-          const val = gURLBar.value;
-          if (val) {
-            field.textContent = val;
-            field.classList.remove('zen-dev-url-empty');
-          } else {
-            field.textContent = 'Search or enter URL';
-            field.classList.add('zen-dev-url-empty');
-          }
-          requestAnimationFrame(mirror);
-        };
-        requestAnimationFrame(mirror);
-
-        const cleanup = () => {
-          active = false;
-          gURLBar.inputField.removeEventListener('blur', cleanup);
-          setTimeout(() => {
-            field.classList.remove('zen-dev-url-empty');
-            field.removeAttribute('data-active');
-            detector._isEditing = false;
-            const nowUri = gBrowser.currentURI.spec;
-            showDisplay(nowUri);
-            // Restore gURLBar value if user cancelled without navigating
+          const nowUri = gBrowser.currentURI.spec;
+          showDisplay(nowUri);
+          try {
+            if (gURLBar.view?.isOpen) gURLBar.view.close();
             if (gURLBar.value !== nowUri) gURLBar.value = nowUri;
-            log('exited edit mode');
-          }, 100);
-        };
-        gURLBar.inputField.addEventListener('blur', cleanup);
+          } catch {}
+          log('exited edit mode');
+        }, 150);
       });
 
       // Called by _update when the tab changes to a non-dev URL while editing
       detector._exitEditMode = () => {
         if (!detector._isEditing) return;
-        try { gURLBar.inputField.blur(); } catch {}
+        field.blur();
       };
 
       /**
