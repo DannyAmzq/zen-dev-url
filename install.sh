@@ -190,10 +190,17 @@ fi
 
 [[ -z "$_raw_paths" ]] && error "Could not determine any profiles from profiles.ini."
 
-mapfile -t PROFILE_DIRS < <(while IFS= read -r p; do
+# Build PROFILE_DIRS array — avoid `mapfile`/`readarray` (bash 4+) because
+# macOS still ships with bash 3.2 by default.
+PROFILE_DIRS=()
+while IFS= read -r p; do
   [[ -z "$p" ]] && continue
-  [[ "$p" = /* ]] && echo "$p" || echo "$_ini_base/$p"
-done <<< "$_raw_paths")
+  if [[ "$p" = /* ]]; then
+    PROFILE_DIRS+=("$p")
+  else
+    PROFILE_DIRS+=("$_ini_base/$p")
+  fi
+done <<< "$_raw_paths"
 
 if [[ ${#PROFILE_DIRS[@]} -eq 1 ]]; then
   info "Detected profile: ${PROFILE_DIRS[0]}"
