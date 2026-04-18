@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260418-8';
+  const ZEN_DEV_URL_VERSION = '20260418-9';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -144,11 +144,11 @@
           if (currentlyShowing) {
             this._forcedBrowsers.delete(browser);
             this._excludedBrowsers.add(browser);
-            this._showToast('◎  Dev banner off');
+            this._showToast('Dev banner off !');
           } else {
             this._excludedBrowsers.delete(browser);
             this._forcedBrowsers.add(browser);
-            this._showToast('◉  Dev banner on');
+            this._showToast('Dev banner on !');
           }
           this._update();
         }
@@ -394,12 +394,12 @@
         return btn;
       };
 
-      // Copy URL button — lives at the right edge of the URL display area
+      // Copy URL button — Zen's gZenCommonActions already shows its own
+      // toast/notification, so we don't fire a second one here.
       const copyBtn = makeBtn('zen-dev-url-copy-link', 'Copy URL', () => {
         gZenCommonActions.copyCurrentURLToClipboard();
         copyBtn.setAttribute('data-copied', '');
         setTimeout(() => copyBtn.removeAttribute('data-copied'), 1500);
-        detector._showToast('◉  Copied URL');
       });
 
       // Clear site data (cookies + localStorage + cache) for the current origin.
@@ -422,7 +422,7 @@
           const cb = { onDataDeleted(resultFlags) {
             clearSiteData.setAttribute('data-done', '');
             setTimeout(() => clearSiteData.removeAttribute('data-done'), 1500);
-            detector._showToast('◉  Cleared site data — ' + host);
+            detector._showToast('Cleared site data — ' + host + ' !');
             // Hard reload AFTER confirmed deletion so we know the page fetches fresh
             gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
           } };
@@ -440,18 +440,14 @@
       // Reload — grouped visually with clear-data (both are page-state tools)
       const reloadBtn = makeBtn('zen-dev-url-clear-refresh', 'Clear cache and reload', () => {
         gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
-        detector._showToast('↻  Hard reloaded (cache bypass)');
+        detector._showToast('Hard reloaded !');
       });
 
       // Screenshot button — grouped with devtools (it's a dev capture tool).
       // toggleScreenshot toggles the panel visibility, so the toast verb depends
       // on whether the panel was visible before this click.
-      const screenshotBtn = makeBtn('zen-dev-url-screenshot', 'Take screenshot', () => {
-        const panel = document.querySelector('.screenshotsPagePanel');
-        const wasOpen = panel && getComputedStyle(panel).display !== 'none';
-        toggleScreenshot();
-        detector._showToast(wasOpen ? '◯  Screenshot tool closed' : '◉  Screenshot tool opened');
-      });
+      const screenshotBtn = makeBtn('zen-dev-url-screenshot', 'Take screenshot',
+        () => toggleScreenshot());
 
       // DevTools toggles report which tool is opening/closing in the toast.
       // For DevTools panels, "open" means showing for first time OR switching
@@ -461,9 +457,9 @@
         if (!dt) return null;
         const toolbox = dt.getToolboxForTab(gBrowser.selectedTab);
         if (toolbox && !toolbox._destroyer && toolbox.currentToolId === toolId) {
-          return `◯  ${label} closed`;
+          return `${label} closed !`;
         }
-        return `◉  ${label} opened`;
+        return `${label} opened !`;
       };
 
       // DevTools group: inspector, console, network (separate from page tools)
@@ -475,14 +471,14 @@
           // Close inspector if already open
           if (toolbox && !toolbox._destroyer && toolbox.currentToolId === 'inspector') {
             toolbox.destroy();
-            detector._showToast('◯  Inspector closed');
+            detector._showToast('Inspector closed !');
             return;
           }
           // Open inspector and immediately activate the node picker
           dt.showToolboxForTab(gBrowser.selectedTab, { toolId: 'inspector' })
             .then(tb => tb?.nodePicker?.start(tb.currentTarget, tb))
             .catch(e => console.error('[zen-dev-url] picker error:', e));
-          detector._showToast('◉  Inspector opened — picker active');
+          detector._showToast('Inspector opened !');
         }),
         makeBtn('zen-dev-url-console', 'Open console', () => {
           const msg = devToolsToast('Console', 'webconsole');
@@ -975,7 +971,7 @@
         ['Copy as curl', () => {
           const url = gBrowser.currentURI.spec;
           navigator.clipboard.writeText(`curl '${url.replace(/'/g, `'\\''`)}'`)
-            .then(() => this._showToast('◉  Copied curl'))
+            .then(() => this._showToast('Copied curl !'))
             .catch(err => console.error('[zen-dev-url] clipboard write failed:', err));
         }],
       ];
