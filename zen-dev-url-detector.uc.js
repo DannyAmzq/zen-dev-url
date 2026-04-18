@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260418-9';
+  const ZEN_DEV_URL_VERSION = '20260418-10';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -821,15 +821,24 @@
      * Creates a full-width action button row for the settings panel.
      * Clicking it executes the action and closes the panel.
      * @param {string} labelText
+     * @param {string} iconUrl  chrome:// path to an SVG rendered via mask-image
      * @param {Function} action
      * @returns {HTMLElement}
      */
-    _makeActionRow(labelText, action) {
+    _makeActionRow(labelText, iconUrl, action) {
       const row = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
       row.className = 'zen-dev-url-action-row';
       const btn = document.createElementNS('http://www.w3.org/1999/xhtml', 'button');
       btn.className = 'zen-dev-url-action-btn';
-      btn.textContent = labelText;
+      const icon = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+      icon.className = 'zen-dev-url-action-icon';
+      icon.style.maskImage = `url("${iconUrl}")`;
+      icon.style.webkitMaskImage = `url("${iconUrl}")`;
+      const labelNode = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+      labelNode.className = 'zen-dev-url-action-label';
+      labelNode.textContent = labelText;
+      btn.appendChild(icon);
+      btn.appendChild(labelNode);
       btn.addEventListener('click', () => {
         action();
         detector._closeSettings();
@@ -935,12 +944,12 @@
       panel.appendChild(this._makeSectionHeader('Actions'));
       const sysPrincipal = () => Services.scriptSecurityManager.getSystemPrincipal();
       const ACTIONS = [
-        ['Open in new tab', () => {
+        ['Open in new tab', 'chrome://browser/skin/new-tab.svg', () => {
           const url = gBrowser.currentURI.spec;
           const tab = gBrowser.addTab(url, { triggeringPrincipal: sysPrincipal() });
           gBrowser.selectedTab = tab;
         }],
-        ['Open in private window', () => {
+        ['Open in private window', 'chrome://browser/skin/privateBrowsing.svg', () => {
           const url = gBrowser.currentURI.spec;
           const win = OpenBrowserWindow({ private: true });
           win.addEventListener('load', () => {
@@ -963,20 +972,20 @@
             }, 0);
           }, { once: true });
         }],
-        ['View page source', () => {
+        ['View page source', 'chrome://devtools/skin/images/tool-styleeditor.svg', () => {
           const url = 'view-source:' + gBrowser.currentURI.spec;
           const tab = gBrowser.addTab(url, { triggeringPrincipal: sysPrincipal() });
           gBrowser.selectedTab = tab;
         }],
-        ['Copy as curl', () => {
+        ['Copy as curl', 'chrome://global/skin/icons/edit-copy.svg', () => {
           const url = gBrowser.currentURI.spec;
           navigator.clipboard.writeText(`curl '${url.replace(/'/g, `'\\''`)}'`)
             .then(() => this._showToast('Copied curl !'))
             .catch(err => console.error('[zen-dev-url] clipboard write failed:', err));
         }],
       ];
-      for (const [label, onClick] of ACTIONS) {
-        panel.appendChild(this._makeActionRow(label, onClick));
+      for (const [label, iconUrl, onClick] of ACTIONS) {
+        panel.appendChild(this._makeActionRow(label, iconUrl, onClick));
       }
 
       document.documentElement.appendChild(panel);
