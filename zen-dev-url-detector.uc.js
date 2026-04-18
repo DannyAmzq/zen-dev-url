@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260418-7';
+  const ZEN_DEV_URL_VERSION = '20260418-8';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -1155,7 +1155,9 @@
     const urlField = document.getElementById('zen-dev-url-field');
     assert('banner exists',              !!banner,                                true);
     assert('URL field exists',           !!urlField,                              true);
-    assert('URL field is INPUT',         urlField?.tagName,                       'INPUT');
+    // Element created via createElementNS(XHTML, 'input'), so tagName is
+    // returned lowercase — unlike the uppercase you get for HTML elements.
+    assert('URL field is input',         urlField?.tagName?.toLowerCase(),        'input');
     assert('URL field type=text',        urlField?.type,                          'text');
     assert('URL field autocomplete off', urlField?.getAttribute('autocomplete'),  'off');
     assert('URL field has placeholder',  urlField?.placeholder?.length > 0,       true);
