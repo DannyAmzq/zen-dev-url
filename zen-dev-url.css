@@ -121,12 +121,13 @@
 }
 
 /* URL bar wrapper — flex container for the field alongside banner buttons.
-   Use `flex: 1 1 0%` (basis 0, not auto) so the wrapper always grows from
-   zero to fill all leftover banner space, regardless of content size. */
+   `flex: 1 1 0%` grows from zero to fill leftover banner space. `overflow:
+   hidden` prevents the child field from pushing the wrapper past its flex
+   allocation when the URL text is very long. */
 #zen-dev-url-field-wrapper {
     flex: 1 1 0% !important;
     min-width: 0 !important;
-    width: auto !important;
+    overflow: hidden !important;
     display: flex !important;
     align-items: stretch !important;
 }
@@ -134,11 +135,10 @@
 /* URL field — styled display of the current URL. Clicking redirects focus
    to gURLBar (real urlbar) which handles typing + native Zen suggestions
    popup. We mirror gURLBar.value back here so the user sees typing.
-   Use `flex: 1 1 0%` + `width: 100%` so the field truly stretches across
-   the wrapper instead of hugging the URL text. */
+   Static width — the field fills whatever the wrapper's flex allocation is,
+   never grows or shrinks with text content. */
 #zen-dev-url-field {
     flex: 1 1 0% !important;
-    width: 100% !important;
     min-width: 0 !important;
     box-sizing: border-box;
     min-height: 24px;
