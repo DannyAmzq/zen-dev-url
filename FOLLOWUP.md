@@ -6,10 +6,14 @@ memory, so things that need picking up later get written here.
 ## Open
 
 ### Feature work
-- [ ] **#20 — Banner URL field: real urlbar autocomplete.** Replace the custom
-  contenteditable div with a bridge to the real Firefox urlbar. Research done
-  (Option 1: bridge integration recommended). Also fix URL field opacity on
-  Windows. See issue #20 for full plan.
+- [ ] **#20 — Banner URL field: real input with gURLBar bridge.** v20260418-4
+  landed the core: a real `<input>` in the dev banner with cursor, selection,
+  and typing all local. Every keystroke syncs to `gURLBar.value` +
+  `gURLBar.startQuery()` so the native suggestions popup opens from gURLBar.
+  Enter navigates via `fixupAndLoadURIString`, Escape/blur restores display.
+  **Next:** forward ArrowDown/ArrowUp/Tab to `gURLBar.view.selectBy()` for
+  suggestion navigation, and ArrowRight to accept autofill. Also fix URL
+  field opacity on Windows. See issue #20.
 - [ ] **Stale PRs to close:** #7 (Copilot audit PR, superseded by #19),
   #16 (duplicate targeting main), #17 and #18 (cloudyun888 — obsolete).
 
