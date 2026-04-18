@@ -455,20 +455,42 @@ done
 
 [[ $INSTALLED -eq 0 ]] && error "No profiles were successfully installed to."
 
-# ── 5. Remind about about:config ────────────────────────────
+# ── 5. Remind about about:config (only if not already set) ──
+# Check prefs.js in every installed profile. If EVERY profile already has
+# the pref set to true, the reminder is unnecessary — skip the yellow box
+# and just note it was already enabled. If ANY profile is missing it,
+# show the reminder (and, if partial, list which profiles need it).
+
+_pref_missing_count=0
+_pref_missing_profiles=()
+for PROFILE_DIR in "${PROFILE_DIRS[@]}"; do
+  [[ ! -d "$PROFILE_DIR" ]] && continue
+  if ! grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets.*true' \
+         "$PROFILE_DIR/prefs.js" 2>/dev/null; then
+    _pref_missing_count=$((_pref_missing_count + 1))
+    _pref_missing_profiles+=("$(basename "$PROFILE_DIR")")
+  fi
+done
 
 echo ""
-echo -e "${YELLOW}┌─────────────────────────────────────────────────────┐${NC}"
-echo -e "${YELLOW}│  Almost done — one manual step required in Zen:     │${NC}"
-echo -e "${YELLOW}│                                                     │${NC}"
-echo -e "${YELLOW}│  1. Open Zen and go to: about:config                │${NC}"
-echo -e "${YELLOW}│  2. Search: toolkit.legacyUserProfileCustomizations │${NC}"
-echo -e "${YELLOW}│             .stylesheets                            │${NC}"
-echo -e "${YELLOW}│  3. Set it to: true                                 │${NC}"
-echo -e "${YELLOW}│  4. Restart Zen                                     │${NC}"
-echo -e "${YELLOW}│                                                     │${NC}"
-echo -e "${YELLOW}│  The dev banner will appear on localhost URLs.      │${NC}"
-echo -e "${YELLOW}└─────────────────────────────────────────────────────┘${NC}"
+if [[ $_pref_missing_count -eq 0 ]]; then
+  success "✔ toolkit.legacyUserProfileCustomizations.stylesheets already enabled — no manual step needed."
+else
+  echo -e "${YELLOW}┌─────────────────────────────────────────────────────┐${NC}"
+  echo -e "${YELLOW}│  Almost done — one manual step required in Zen:     │${NC}"
+  echo -e "${YELLOW}│                                                     │${NC}"
+  echo -e "${YELLOW}│  1. Open Zen and go to: about:config                │${NC}"
+  echo -e "${YELLOW}│  2. Search: toolkit.legacyUserProfileCustomizations │${NC}"
+  echo -e "${YELLOW}│             .stylesheets                            │${NC}"
+  echo -e "${YELLOW}│  3. Set it to: true                                 │${NC}"
+  echo -e "${YELLOW}│  4. Restart Zen                                     │${NC}"
+  echo -e "${YELLOW}│                                                     │${NC}"
+  echo -e "${YELLOW}│  The dev banner will appear on localhost URLs.      │${NC}"
+  echo -e "${YELLOW}└─────────────────────────────────────────────────────┘${NC}"
+  if [[ ${#PROFILE_DIRS[@]} -gt 1 && $_pref_missing_count -lt ${#PROFILE_DIRS[@]} ]]; then
+    warn "Needed in: ${_pref_missing_profiles[*]}"
+  fi
+fi
 echo ""
 
 # ── 6. Report status honestly ───────────────────────────────
