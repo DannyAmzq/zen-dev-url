@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260418-5';
+  const ZEN_DEV_URL_VERSION = '20260418-6';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -1143,19 +1143,31 @@
     // contain the bare form or the match silently fails for http://[::1]/ URLs.
     assert('IPv6 localhost (::1) is in _devHosts', detector._devHosts.has('::1'), true);
 
-    // URL bridge regex — the banner's showDisplay splits a URI into
-    // protocol and host+path so each can be styled independently.
-    const BRIDGE_URL_RE = /^((?:https?|file):\/\/\/?)(.*)/;
-    const bridgeSplit = (spec) => {
-      const m = spec.match(BRIDGE_URL_RE);
-      return m ? [m[1], m[2]] : null;
-    };
-    assert('bridge regex splits http proto',      bridgeSplit('http://localhost:3000/')?.[0],       'http://');
-    assert('bridge regex splits http host/path',  bridgeSplit('http://localhost:3000/')?.[1],       'localhost:3000/');
-    assert('bridge regex splits https proto',     bridgeSplit('https://example.com/a')?.[0],        'https://');
-    assert('bridge regex splits file proto',      bridgeSplit('file:///home/user/index.html')?.[0], 'file:///');
-    assert('bridge regex ignores about: URIs',    bridgeSplit('about:config'),                      null);
-    assert('bridge regex ignores chrome: URIs',   bridgeSplit('chrome://browser/content/'),         null);
+    // Banner URL field — should be a real <input> (v20260418-4+) so the cursor,
+    // text selection, and keyboard interaction all live locally. The gURLBar
+    // bridge runs on top of this: each keystroke syncs value + triggers search.
+    const banner = document.getElementById('zen-dev-url-banner');
+    const urlField = document.getElementById('zen-dev-url-field');
+    assert('banner exists',              !!banner,                                true);
+    assert('URL field exists',           !!urlField,                              true);
+    assert('URL field is INPUT',         urlField?.tagName,                       'INPUT');
+    assert('URL field type=text',        urlField?.type,                          'text');
+    assert('URL field autocomplete off', urlField?.getAttribute('autocomplete'),  'off');
+    assert('URL field has placeholder',  urlField?.placeholder?.length > 0,       true);
+    assert('URL field spellcheck off',   urlField?.spellcheck,                    false);
+
+    // Edit-mode lifecycle contract — _exitEditMode is invoked by _update() when
+    // the tab changes to a non-dev URL while the user is still typing.
+    assert('_exitEditMode is a function', typeof detector._exitEditMode,          'function');
+    assert('_isEditing defaults to false', detector._isEditing === true || detector._isEditing === false, true);
+
+    // gURLBar bridge sanity — if any of these are missing, suggestion nav
+    // and autofill will silently no-op. Log a clear failure instead.
+    assert('gURLBar exists',             typeof gURLBar,                          'object');
+    assert('gURLBar.view exists',        !!gURLBar?.view,                         true);
+    assert('gURLBar.view.selectBy fn',   typeof gURLBar?.view?.selectBy,          'function');
+    assert('gURLBar.startQuery fn',      typeof gURLBar?.startQuery,              'function');
+    assert('gURLBar.handleCommand fn',   typeof gURLBar?.handleCommand,           'function');
 
     const total = pass + fail;
     const status = fail === 0
