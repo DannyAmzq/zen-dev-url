@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260418-4';
+  const ZEN_DEV_URL_VERSION = '20260418-5';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -207,23 +207,91 @@
         log('dev URL bar focused with', startUri);
       });
 
-      // Input: sync typed value to gURLBar and trigger autocomplete search
+      // Input: sync typed value to gURLBar and trigger autocomplete search.
+      // After the search, check if gURLBar autofilled — if so, show the
+      // autofill text in our field with the completion portion selected
+      // (just like the real URL bar). ArrowRight accepts the autofill.
       field.addEventListener('input', () => {
         try {
-          gURLBar.value = field.value;
+          const typed = field.value;
+          const cursorPos = field.selectionStart;
+          gURLBar.value = typed;
           gURLBar.setAttribute('focused', 'true');
           if (typeof gURLBar.startQuery === 'function') {
             gURLBar.startQuery();
           }
+          requestAnimationFrame(() => {
+            try {
+              const gVal = gURLBar.value;
+              if (gVal.length > typed.length && gVal.toLowerCase().startsWith(typed.toLowerCase())) {
+                field.value = gVal;
+                field.setSelectionRange(cursorPos, gVal.length);
+              }
+            } catch {}
+          });
         } catch (err) {
           log('gURLBar sync/search error:', err);
         }
       });
 
-      // Keydown: Enter navigates, Escape cancels
+      // Keydown: navigation keys are forwarded to gURLBar's suggestion list
+      // so ArrowDown/ArrowUp/Tab cycle through suggestions and ArrowRight
+      // accepts autofill — all using gURLBar's native logic.
       field.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
           e.preventDefault();
+          try {
+            if (gURLBar.view?.isOpen) {
+              gURLBar.view.selectBy(1, { reverse: e.key === 'ArrowUp' });
+              requestAnimationFrame(() => {
+                if (gURLBar.value) {
+                  field.value = gURLBar.value;
+                  field.setSelectionRange(field.value.length, field.value.length);
+                }
+              });
+            }
+          } catch (err) {
+            log('suggestion nav error:', err);
+          }
+        } else if (e.key === 'Tab') {
+          e.preventDefault();
+          try {
+            if (gURLBar.view?.isOpen) {
+              gURLBar.view.selectBy(1, { reverse: e.shiftKey });
+              requestAnimationFrame(() => {
+                if (gURLBar.value) {
+                  field.value = gURLBar.value;
+                  field.setSelectionRange(field.value.length, field.value.length);
+                }
+              });
+            }
+          } catch (err) {
+            log('tab nav error:', err);
+          }
+        } else if (e.key === 'ArrowRight') {
+          // At end of typed text (or with autofill selected): accept the autofill
+          if (field.selectionStart !== field.selectionEnd || field.selectionStart === field.value.length) {
+            try {
+              const gVal = gURLBar.value;
+              if (gVal && gVal.length > 0 && gVal !== field.value) {
+                e.preventDefault();
+                field.value = gVal;
+                field.setSelectionRange(field.value.length, field.value.length);
+              }
+            } catch {}
+          }
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          try {
+            // If a suggestion is selected in gURLBar's view, use its handler
+            if (gURLBar.view?.isOpen && gURLBar.view?.selectedElement) {
+              gURLBar.handleCommand(e);
+              field.blur();
+              return;
+            }
+          } catch (err) {
+            log('gURLBar handleCommand error:', err);
+          }
           const url = field.value.trim();
           if (!url) return;
           try {
@@ -237,6 +305,9 @@
           field.blur();
         } else if (e.key === 'Escape') {
           e.preventDefault();
+          try {
+            if (gURLBar.view?.isOpen) gURLBar.view.close();
+          } catch {}
           field.blur();
         }
       });
