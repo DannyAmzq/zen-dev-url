@@ -364,14 +364,51 @@ else
   CONFIG_PREFS="$ZEN_RESOURCES/defaults/pref/config-prefs.js"
 
   if [[ ! -f "$CONFIG_JS" ]]; then
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-      sudo cp "$FX_SRC/program/config.js" "$CONFIG_JS"
-      sudo mkdir -p "$ZEN_RESOURCES/defaults/pref"
-      sudo cp "$FX_SRC/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
-    else
-      cp "$FX_SRC/program/config.js" "$CONFIG_JS"
-      mkdir -p "$ZEN_RESOURCES/defaults/pref"
-      cp "$FX_SRC/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
+    # On macOS Ventura+ the OS blocks writes inside /Applications app
+    # bundles unless the shell's parent app has been granted App Management
+    # permission in System Settings. Even `sudo cp` fails with "Operation
+    # not permitted". Detect that case and explain the fix in-line instead
+    # of dying with an opaque error.
+    _install_fx_files() {
+      if [[ "$OSTYPE" == "darwin"* ]]; then
+        sudo cp "$FX_SRC/program/config.js" "$CONFIG_JS" \
+          && sudo mkdir -p "$ZEN_RESOURCES/defaults/pref" \
+          && sudo cp "$FX_SRC/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
+      else
+        cp "$FX_SRC/program/config.js" "$CONFIG_JS" \
+          && mkdir -p "$ZEN_RESOURCES/defaults/pref" \
+          && cp "$FX_SRC/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
+      fi
+    }
+
+    if ! _install_fx_files 2>/tmp/zen-dev-url-install-err; then
+      _err=$(cat /tmp/zen-dev-url-install-err 2>/dev/null)
+      rm -f /tmp/zen-dev-url-install-err
+      if [[ "$OSTYPE" == "darwin"* && "$_err" == *"Operation not permitted"* ]]; then
+        echo ""
+        echo -e "${RED}┌───────────────────────────────────────────────────────────┐${NC}"
+        echo -e "${RED}│  macOS blocked the write — App Management permission     │${NC}"
+        echo -e "${RED}├───────────────────────────────────────────────────────────┤${NC}"
+        echo -e "${RED}│                                                           │${NC}"
+        echo -e "${RED}│  Even with sudo, macOS Ventura+ will not let a terminal   │${NC}"
+        echo -e "${RED}│  modify /Applications/Zen.app unless you grant it App     │${NC}"
+        echo -e "${RED}│  Management permission.                                   │${NC}"
+        echo -e "${RED}│                                                           │${NC}"
+        echo -e "${RED}│  Fix:                                                     │${NC}"
+        echo -e "${RED}│  1. Open System Settings → Privacy & Security             │${NC}"
+        echo -e "${RED}│     → App Management                                      │${NC}"
+        echo -e "${RED}│  2. Toggle ON your terminal app (Terminal / iTerm /       │${NC}"
+        echo -e "${RED}│     Ghostty / Warp / etc).                                │${NC}"
+        echo -e "${RED}│  3. Fully quit and reopen the terminal.                   │${NC}"
+        echo -e "${RED}│  4. Re-run ./install.sh                                   │${NC}"
+        echo -e "${RED}│                                                           │${NC}"
+        echo -e "${RED}└───────────────────────────────────────────────────────────┘${NC}"
+        echo ""
+        error "Install aborted — grant App Management permission and retry."
+      else
+        [[ -n "$_err" ]] && echo "$_err" >&2
+        error "Failed to install fx-autoconfig program files to $ZEN_RESOURCES"
+      fi
     fi
     success "fx-autoconfig program files installed (from vendored copy)."
   else
