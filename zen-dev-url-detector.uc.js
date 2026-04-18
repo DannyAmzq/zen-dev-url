@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260418-1';
+  const ZEN_DEV_URL_VERSION = '20260418-2';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -335,6 +335,7 @@
         gZenCommonActions.copyCurrentURLToClipboard();
         copyBtn.setAttribute('data-copied', '');
         setTimeout(() => copyBtn.removeAttribute('data-copied'), 1500);
+        detector._showToast('◉  Copied URL');
       });
 
       // Clear site data (cookies + localStorage + cache) for the current origin.
@@ -357,6 +358,7 @@
           const cb = { onDataDeleted(resultFlags) {
             clearSiteData.setAttribute('data-done', '');
             setTimeout(() => clearSiteData.removeAttribute('data-done'), 1500);
+            detector._showToast('◉  Cleared site data — ' + host);
             // Hard reload AFTER confirmed deletion so we know the page fetches fresh
             gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
           } };
@@ -372,12 +374,33 @@
       });
 
       // Reload — grouped visually with clear-data (both are page-state tools)
-      const reloadBtn = makeBtn('zen-dev-url-clear-refresh', 'Clear cache and reload',
-        () => gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE));
+      const reloadBtn = makeBtn('zen-dev-url-clear-refresh', 'Clear cache and reload', () => {
+        gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
+        detector._showToast('↻  Hard reloaded (cache bypass)');
+      });
 
-      // Screenshot button — grouped with devtools (it's a dev capture tool)
-      const screenshotBtn = makeBtn('zen-dev-url-screenshot', 'Take screenshot',
-        () => toggleScreenshot());
+      // Screenshot button — grouped with devtools (it's a dev capture tool).
+      // toggleScreenshot toggles the panel visibility, so the toast verb depends
+      // on whether the panel was visible before this click.
+      const screenshotBtn = makeBtn('zen-dev-url-screenshot', 'Take screenshot', () => {
+        const panel = document.querySelector('.screenshotsPagePanel');
+        const wasOpen = panel && getComputedStyle(panel).display !== 'none';
+        toggleScreenshot();
+        detector._showToast(wasOpen ? '◯  Screenshot tool closed' : '◉  Screenshot tool opened');
+      });
+
+      // DevTools toggles report which tool is opening/closing in the toast.
+      // For DevTools panels, "open" means showing for first time OR switching
+      // from another tool; "close" means destroying the toolbox.
+      const devToolsToast = (label, toolId) => {
+        const dt = getDevTools();
+        if (!dt) return null;
+        const toolbox = dt.getToolboxForTab(gBrowser.selectedTab);
+        if (toolbox && !toolbox._destroyer && toolbox.currentToolId === toolId) {
+          return `◯  ${label} closed`;
+        }
+        return `◉  ${label} opened`;
+      };
 
       // DevTools group: inspector, console, network (separate from page tools)
       const devButtons = [
@@ -388,15 +411,25 @@
           // Close inspector if already open
           if (toolbox && !toolbox._destroyer && toolbox.currentToolId === 'inspector') {
             toolbox.destroy();
+            detector._showToast('◯  Inspector closed');
             return;
           }
           // Open inspector and immediately activate the node picker
           dt.showToolboxForTab(gBrowser.selectedTab, { toolId: 'inspector' })
             .then(tb => tb?.nodePicker?.start(tb.currentTarget, tb))
             .catch(e => console.error('[zen-dev-url] picker error:', e));
+          detector._showToast('◉  Inspector opened — picker active');
         }),
-        makeBtn('zen-dev-url-console', 'Open console', () => togglePanel('webconsole')),
-        makeBtn('zen-dev-url-network', 'Open network panel', () => togglePanel('netmonitor')),
+        makeBtn('zen-dev-url-console', 'Open console', () => {
+          const msg = devToolsToast('Console', 'webconsole');
+          togglePanel('webconsole');
+          if (msg) detector._showToast(msg);
+        }),
+        makeBtn('zen-dev-url-network', 'Open network panel', () => {
+          const msg = devToolsToast('Network panel', 'netmonitor');
+          togglePanel('netmonitor');
+          if (msg) detector._showToast(msg);
+        }),
       ];
 
       // Viewport size readout — updated on resize and tab/navigation changes
