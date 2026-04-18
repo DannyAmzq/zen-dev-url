@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260418-6';
+  const ZEN_DEV_URL_VERSION = '20260418-7';
   console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -1082,7 +1082,12 @@
   // ── Self-tests ────────────────────────────────────────────────────────────
   // Off by default to keep the user's console quiet.
   // Contributors: flip zen.urlbar.dev-indicator.self-tests = true in about:config.
-  if (Services.prefs.getBoolPref('zen.urlbar.dev-indicator.self-tests', false)) (function runSelfTests() {
+  // Defined as a function (not IIFE) so we can run it AFTER init() creates the
+  // banner + URL field. Some assertions check DOM elements that don't exist
+  // until init() finishes.
+  const runSelfTests = () => {
+    if (!Services.prefs.getBoolPref('zen.urlbar.dev-indicator.self-tests', false)) return;
+    (function runSelfTestsInner() {
     let pass = 0, fail = 0;
 
     function assert(description, actual, expected) {
@@ -1175,11 +1180,19 @@
       : `%c[zen-dev-url] self-tests: ${fail} FAILED, ${pass}/${total} passed`;
     const style = fail === 0 ? 'color:#90ee90;font-weight:bold' : 'color:#ff4444;font-weight:bold';
     console.log(status, style);
-  })();
+    })();
+  };
+
+  const bootstrap = () => {
+    detector.init();
+    // Init is synchronous (banner + field appended to DOM before return),
+    // so self-tests on DOM state are reliable immediately after.
+    runSelfTests();
+  };
 
   if (gBrowser) {
-    detector.init();
+    bootstrap();
   } else {
-    window.addEventListener('DOMContentLoaded', () => detector.init(), { once: true });
+    window.addEventListener('DOMContentLoaded', bootstrap, { once: true });
   }
 })();
