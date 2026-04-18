@@ -132,19 +132,21 @@
     align-items: stretch !important;
 }
 
-/* URL field — styled display of the current URL. Clicking redirects focus
-   to gURLBar (real urlbar) which handles typing + native Zen suggestions
-   popup. We mirror gURLBar.value back here so the user sees typing.
-   Static width — the field fills whatever the wrapper's flex allocation is,
-   never grows or shrinks with text content. */
+/* URL field — real <input> that the user types into directly. The cursor,
+   text selection, and keyboard interaction all live here. Values are synced
+   to gURLBar in the background to trigger native autocomplete. */
 #zen-dev-url-field {
+    appearance: none !important;
+    -moz-appearance: none !important;
     flex: 1 1 0% !important;
     min-width: 0 !important;
-    box-sizing: border-box;
-    min-height: 24px;
+    box-sizing: border-box !important;
+    height: 28px;
     padding: 4px 8px;
+    border: none !important;
     border-radius: 4px;
-    background: rgba(0, 0, 0, 0.35);
+    background: rgba(0, 0, 0, 0.35) !important;
+    background-image: none !important;
     font-size: 13px;
     font-family: monospace !important;
     line-height: 1.4;
@@ -153,49 +155,25 @@
     overflow: hidden;
     text-overflow: ellipsis;
     cursor: pointer;
-    outline: 1.5px solid transparent;
-    color: #ffffff;
-    -moz-user-select: text;
+    outline: 1.5px solid transparent !important;
+    color: #ffffff !important;
+    caret-color: #ff6b35;
+}
+
+#zen-dev-url-field::placeholder {
+    color: rgba(255, 255, 255, 0.35);
+    opacity: 1;
 }
 
 #zen-dev-url-field:hover {
-    background: rgba(0, 0, 0, 0.42);
+    background: rgba(0, 0, 0, 0.42) !important;
 }
 
-/* Active: gURLBar has focus for us. Orange outline + blinking caret at
-   the end of the mirrored text to signal "you are typing here". */
+/* Active: input is focused — user is typing. Orange outline, darker bg. */
 #zen-dev-url-field[data-active] {
     cursor: text;
     outline: 2px solid #ff6b35 !important;
-    background: rgba(0, 0, 0, 0.55);
-}
-
-#zen-dev-url-field[data-active]::after {
-    content: '';
-    display: inline-block;
-    width: 1.5px;
-    height: 1em;
-    background: #ff6b35;
-    margin-left: 1px;
-    vertical-align: text-bottom;
-    animation: zen-dev-url-caret-blink 1s step-end infinite;
-}
-
-@keyframes zen-dev-url-caret-blink {
-    50% { opacity: 0; }
-}
-
-/* Empty state — gURLBar.value is empty. Show placeholder in muted color. */
-#zen-dev-url-field.zen-dev-url-empty {
-    color: rgba(255, 255, 255, 0.35);
-}
-
-.zen-dev-url-protocol {
-    color: rgba(255, 255, 255, 0.4);
-}
-
-.zen-dev-url-host {
-    color: #ffffff;
+    background: rgba(0, 0, 0, 0.55) !important;
 }
 
 .zen-dev-url-btn {
