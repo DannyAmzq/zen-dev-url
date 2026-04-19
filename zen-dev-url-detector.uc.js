@@ -156,11 +156,16 @@
       this._update();
     },
 
-    /**
-     * Builds and appends the dev banner to the document root.
-     * The banner contains an editable URL input and action buttons.
-     * It is positioned over the content area via _repositionBanner().
-     */
+    _getDevTools() {
+      try {
+        const { DevToolsShim } = ChromeUtils.importESModule('chrome://devtools-startup/content/DevToolsShim.sys.mjs');
+        return DevToolsShim;
+      } catch (e) {
+        console.error('[zen-dev-url] could not load DevToolsShim:', e);
+        return null;
+      }
+    },
+
     _createBanner() {
       const banner = document.createXULElement('hbox');
       banner.id = 'zen-dev-url-banner';
@@ -333,20 +338,7 @@
         field.blur();
       };
 
-      /**
-       * Lazily loads DevToolsShim so DevTools panels can be opened/closed
-       * without importing the module at startup.
-       * @returns {DevToolsShim|null}
-       */
-      const getDevTools = () => {
-        try {
-          const { DevToolsShim } = ChromeUtils.importESModule('chrome://devtools-startup/content/DevToolsShim.sys.mjs');
-          return DevToolsShim;
-        } catch (e) {
-          console.error('[zen-dev-url] could not load DevToolsShim:', e);
-          return null;
-        }
-      };
+      const getDevTools = () => detector._getDevTools();
 
       /**
        * Opens a DevTools panel for the current tab, or closes it if it is
@@ -633,10 +625,12 @@
         // Auto-open DevTools panel if setting is on and panel not already open
         if (this._prefs.autoOpenDevtools) {
           try {
-            const { DevToolsShim } = ChromeUtils.importESModule('chrome://devtools-startup/content/DevToolsShim.sys.mjs');
-            const toolbox = DevToolsShim.getToolboxForTab(gBrowser.selectedTab);
-            if (!toolbox || toolbox._destroyer) {
-              DevToolsShim.showToolboxForTab(gBrowser.selectedTab, { toolId: this._prefs.autoOpenPanel });
+            const dt = this._getDevTools();
+            if (dt) {
+              const toolbox = dt.getToolboxForTab(gBrowser.selectedTab);
+              if (!toolbox || toolbox._destroyer) {
+                dt.showToolboxForTab(gBrowser.selectedTab, { toolId: this._prefs.autoOpenPanel });
+              }
             }
           } catch { /* DevTools unavailable */ }
         }
