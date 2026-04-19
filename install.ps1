@@ -299,18 +299,24 @@ foreach ($ProfileDir in $ProfileDirs) {
   Copy-Item "$ScriptDir\zen-dev-url-detector.uc.js" $JsDir -Force
   Success "Copied userscript to $JsDir"
 
-  # CSS (idempotent)
+  # CSS — always refresh. If an existing zen-dev-url block is present,
+  # strip everything from the marker to EOF and re-append, so re-running
+  # install.ps1 picks up CSS changes (icons, stripe colors, etc).
   $ChromeCss = Join-Path $ProfileDir "chrome\userChrome.css"
   $Marker    = "/* zen-dev-url */"
-  $alreadyInstalled = (Test-Path $ChromeCss) -and
-                      (Get-Content $ChromeCss -Raw) -match [regex]::Escape($Marker)
-  if ($alreadyInstalled) {
-    Warn "zen-dev-url styles already present in userChrome.css for $(Split-Path -Leaf $ProfileDir), skipping."
-  } else {
-    $cssContent = "`n$Marker`n" + (Get-Content "$ScriptDir\zen-dev-url.css" -Raw)
-    Add-Content -Path $ChromeCss -Value $cssContent -Encoding UTF8
-    Success "Appended styles to $ChromeCss"
+  if ((Test-Path $ChromeCss) -and (Get-Content $ChromeCss -Raw) -match [regex]::Escape($Marker)) {
+    $lines = Get-Content $ChromeCss
+    $idx = ($lines | Select-String -SimpleMatch $Marker | Select-Object -First 1).LineNumber - 1
+    if ($idx -gt 0) {
+      $lines[0..($idx - 1)] | Set-Content $ChromeCss -Encoding UTF8
+    } else {
+      Set-Content $ChromeCss "" -Encoding UTF8
+    }
+    Info "Stripped existing zen-dev-url styles before re-appending."
   }
+  $cssContent = "`n$Marker`n" + (Get-Content "$ScriptDir\zen-dev-url.css" -Raw)
+  Add-Content -Path $ChromeCss -Value $cssContent -Encoding UTF8
+  Success "Appended styles to $ChromeCss"
 
   $Installed++
 }
