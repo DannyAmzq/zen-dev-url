@@ -381,9 +381,10 @@ else
       fi
     }
 
-    if ! _install_fx_files 2>/tmp/zen-dev-url-install-err; then
-      _err=$(cat /tmp/zen-dev-url-install-err 2>/dev/null)
-      rm -f /tmp/zen-dev-url-install-err
+    _err_file=$(mktemp "${TMPDIR:-/tmp}/zen-dev-url-install-err.XXXXXX")
+    if ! _install_fx_files 2>"$_err_file"; then
+      _err=$(cat "$_err_file" 2>/dev/null)
+      rm -f "$_err_file"
       if [[ "$OSTYPE" == "darwin"* && "$_err" == *"Operation not permitted"* ]]; then
         echo ""
         echo -e "${RED}┌───────────────────────────────────────────────────────────┐${NC}"
