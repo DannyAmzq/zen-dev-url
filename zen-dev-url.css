@@ -70,10 +70,10 @@
             -45deg,
             transparent,
             transparent 6px,
-            rgba(255, 107, 53, 0.18) 6px,
-            rgba(255, 107, 53, 0.18) 12px
+            rgba(255, 107, 53, 0.30) 6px,
+            rgba(255, 107, 53, 0.30) 12px
         ),
-        color-mix(in srgb, #ff6b35 28%, var(--toolbar-bgcolor));
+        rgba(50, 22, 10, 0.88);
     border-bottom: 1.5px solid #ff6b35;
     cursor: default;
     opacity: 0;
@@ -89,7 +89,7 @@
 /* Push the page content down so the banner doesn't overlap it */
 :root[zen-dev-url] #tabbrowser-tabpanels > .browserSidebarContainer {
     padding-top: 44px !important;
-    background-color: color-mix(in srgb, #ff6b35 15%, var(--toolbar-bgcolor)) !important;
+    background-color: rgba(50, 22, 10, 0.82) !important;
 }
 
 /* Push Zen chrome elements below the dev banner */
@@ -114,54 +114,66 @@
             -45deg,
             transparent,
             transparent 6px,
-            rgba(255, 107, 53, 0.25) 6px,
-            rgba(255, 107, 53, 0.25) 12px
+            rgba(255, 107, 53, 0.35) 6px,
+            rgba(255, 107, 53, 0.35) 12px
         ),
-        color-mix(in srgb, #ff6b35 35%, var(--toolbar-bgcolor));
+        rgba(60, 26, 12, 0.90);
 }
 
-/* Single contenteditable div — display and edit mode in one element */
+/* URL bar wrapper — flex container for the field alongside banner buttons.
+   `flex: 1 1 0%` grows from zero to fill leftover banner space. `overflow:
+   hidden` prevents the child field from pushing the wrapper past its flex
+   allocation when the URL text is very long. */
+#zen-dev-url-field-wrapper {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    align-items: stretch !important;
+}
+
+/* URL field — real <input> that the user types into directly. The cursor,
+   text selection, and keyboard interaction all live here. Values are synced
+   to gURLBar in the background to trigger native autocomplete. */
 #zen-dev-url-field {
-    flex: 1;
-    min-width: 0;
+    appearance: none !important;
+    -moz-appearance: none !important;
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    height: 28px;
     padding: 4px 8px;
+    border: none !important;
     border-radius: 4px;
-    background: color-mix(in srgb, #ff6b35 12%, var(--toolbar-bgcolor));
+    background: rgba(0, 0, 0, 0.35) !important;
+    background-image: none !important;
     font-size: 13px;
     font-family: monospace !important;
     line-height: 1.4;
     letter-spacing: 0;
     white-space: nowrap;
     overflow: hidden;
+    text-overflow: ellipsis;
     cursor: pointer;
-    outline: 1.5px solid transparent;
-    color: #ffffff;
-    -moz-user-select: text;
+    outline: 1.5px solid transparent !important;
+    color: #ffffff !important;
+    caret-color: #ff6b35;
+}
+
+#zen-dev-url-field::placeholder {
+    color: rgba(255, 255, 255, 0.35);
+    opacity: 1;
 }
 
 #zen-dev-url-field:hover {
-    background: color-mix(in srgb, #ff6b35 16%, var(--toolbar-bgcolor));
+    background: rgba(0, 0, 0, 0.42) !important;
 }
 
-#zen-dev-url-field[contenteditable="true"] {
+/* Active: input is focused — user is typing. Orange outline, darker bg. */
+#zen-dev-url-field[data-active] {
     cursor: text;
-    outline-color: rgba(255, 107, 53, 0.75);
-    /* Let the caret scroll into view while editing long URLs —
-       display mode clips via overflow:hidden, edit mode scrolls. */
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-}
-#zen-dev-url-field[contenteditable="true"]::-webkit-scrollbar {
-    display: none;
-}
-
-.zen-dev-url-protocol {
-    color: rgba(255, 255, 255, 0.4);
-}
-
-.zen-dev-url-host {
-    color: #ffffff;
+    outline: 2px solid #ff6b35 !important;
+    background: rgba(0, 0, 0, 0.55) !important;
 }
 
 .zen-dev-url-btn {
@@ -458,12 +470,42 @@
     transition: background 0.12s ease;
 }
 
+.zen-dev-url-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .zen-dev-url-action-btn:hover {
     background: rgba(255, 107, 53, 0.32) !important;
 }
 
 .zen-dev-url-action-btn:active {
     transform: scale(0.98);
+}
+
+/* Icon rendered via mask-image (inline style on the span) so the SVG
+   inherits our orange tint instead of shipping its own colors. */
+.zen-dev-url-action-icon {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    background-color: rgba(255, 255, 255, 0.85);
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+    -webkit-mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+}
+
+.zen-dev-url-action-btn:hover .zen-dev-url-action-icon {
+    background-color: #ffffff;
+}
+
+.zen-dev-url-action-label {
+    flex: 1;
+    text-align: left;
 }
 
 /* DevTools panel select dropdown in settings */

@@ -190,10 +190,17 @@ fi
 
 [[ -z "$_raw_paths" ]] && error "Could not determine any profiles from profiles.ini."
 
-mapfile -t PROFILE_DIRS < <(while IFS= read -r p; do
+# Build PROFILE_DIRS array — avoid `mapfile`/`readarray` (bash 4+) because
+# macOS still ships with bash 3.2 by default.
+PROFILE_DIRS=()
+while IFS= read -r p; do
   [[ -z "$p" ]] && continue
-  [[ "$p" = /* ]] && echo "$p" || echo "$_ini_base/$p"
-done <<< "$_raw_paths")
+  if [[ "$p" = /* ]]; then
+    PROFILE_DIRS+=("$p")
+  else
+    PROFILE_DIRS+=("$_ini_base/$p")
+  fi
+done <<< "$_raw_paths"
 
 if [[ ${#PROFILE_DIRS[@]} -eq 1 ]]; then
   info "Detected profile: ${PROFILE_DIRS[0]}"
@@ -357,14 +364,52 @@ else
   CONFIG_PREFS="$ZEN_RESOURCES/defaults/pref/config-prefs.js"
 
   if [[ ! -f "$CONFIG_JS" ]]; then
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-      sudo cp "$FX_SRC/program/config.js" "$CONFIG_JS"
-      sudo mkdir -p "$ZEN_RESOURCES/defaults/pref"
-      sudo cp "$FX_SRC/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
-    else
-      cp "$FX_SRC/program/config.js" "$CONFIG_JS"
-      mkdir -p "$ZEN_RESOURCES/defaults/pref"
-      cp "$FX_SRC/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
+    # On macOS Ventura+ the OS blocks writes inside /Applications app
+    # bundles unless the shell's parent app has been granted App Management
+    # permission in System Settings. Even `sudo cp` fails with "Operation
+    # not permitted". Detect that case and explain the fix in-line instead
+    # of dying with an opaque error.
+    _install_fx_files() {
+      if [[ "$OSTYPE" == "darwin"* ]]; then
+        sudo cp "$FX_SRC/program/config.js" "$CONFIG_JS" \
+          && sudo mkdir -p "$ZEN_RESOURCES/defaults/pref" \
+          && sudo cp "$FX_SRC/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
+      else
+        cp "$FX_SRC/program/config.js" "$CONFIG_JS" \
+          && mkdir -p "$ZEN_RESOURCES/defaults/pref" \
+          && cp "$FX_SRC/program/defaults/pref/config-prefs.js" "$CONFIG_PREFS"
+      fi
+    }
+
+    _err_file=$(mktemp "${TMPDIR:-/tmp}/zen-dev-url-install-err.XXXXXX")
+    if ! _install_fx_files 2>"$_err_file"; then
+      _err=$(cat "$_err_file" 2>/dev/null)
+      rm -f "$_err_file"
+      if [[ "$OSTYPE" == "darwin"* && "$_err" == *"Operation not permitted"* ]]; then
+        echo ""
+        echo -e "${RED}┌───────────────────────────────────────────────────────────┐${NC}"
+        echo -e "${RED}│  macOS blocked the write — App Management permission     │${NC}"
+        echo -e "${RED}├───────────────────────────────────────────────────────────┤${NC}"
+        echo -e "${RED}│                                                           │${NC}"
+        echo -e "${RED}│  Even with sudo, macOS Ventura+ will not let a terminal   │${NC}"
+        echo -e "${RED}│  modify /Applications/Zen.app unless you grant it App     │${NC}"
+        echo -e "${RED}│  Management permission.                                   │${NC}"
+        echo -e "${RED}│                                                           │${NC}"
+        echo -e "${RED}│  Fix:                                                     │${NC}"
+        echo -e "${RED}│  1. Open System Settings → Privacy & Security             │${NC}"
+        echo -e "${RED}│     → App Management                                      │${NC}"
+        echo -e "${RED}│  2. Toggle ON your terminal app (Terminal / iTerm /       │${NC}"
+        echo -e "${RED}│     Ghostty / Warp / etc).                                │${NC}"
+        echo -e "${RED}│  3. Fully quit and reopen the terminal.                   │${NC}"
+        echo -e "${RED}│  4. Re-run ./install.sh                                   │${NC}"
+        echo -e "${RED}│                                                           │${NC}"
+        echo -e "${RED}└───────────────────────────────────────────────────────────┘${NC}"
+        echo ""
+        error "Install aborted — grant App Management permission and retry."
+      else
+        [[ -n "$_err" ]] && echo "$_err" >&2
+        error "Failed to install fx-autoconfig program files to $ZEN_RESOURCES"
+      fi
     fi
     success "fx-autoconfig program files installed (from vendored copy)."
   else
@@ -396,35 +441,62 @@ for PROFILE_DIR in "${PROFILE_DIRS[@]}"; do
   cp "$SCRIPT_DIR/zen-dev-url-detector.uc.js" "$JS_DIR/"
   success "Copied userscript to $JS_DIR"
 
-  # CSS (idempotent)
+  # CSS — always refresh. If an existing zen-dev-url block is present,
+  # strip everything from the marker to EOF and re-append, so re-running
+  # install.sh picks up CSS changes (icons, stripe colors, etc). Without
+  # this, users who installed once and then `git pull`'d would get JS
+  # updates but frozen CSS.
   CHROME_CSS="$PROFILE_DIR/chrome/userChrome.css"
   MARKER="/* zen-dev-url */"
   if grep -qF "$MARKER" "$CHROME_CSS" 2>/dev/null; then
-    warn "zen-dev-url styles already present in userChrome.css, skipping append."
-  else
-    { echo ""; echo "$MARKER"; cat "$SCRIPT_DIR/zen-dev-url.css"; } >> "$CHROME_CSS"
-    success "Appended styles to $CHROME_CSS"
+    _line=$(grep -nF "$MARKER" "$CHROME_CSS" | head -1 | cut -d: -f1)
+    head -n $((_line - 1)) "$CHROME_CSS" > "$CHROME_CSS.tmp" && mv "$CHROME_CSS.tmp" "$CHROME_CSS"
+    info "Stripped existing zen-dev-url styles before re-appending."
   fi
+  { echo ""; echo "$MARKER"; cat "$SCRIPT_DIR/zen-dev-url.css"; } >> "$CHROME_CSS"
+  success "Appended styles to $CHROME_CSS"
 
   INSTALLED=$((INSTALLED + 1))
 done
 
 [[ $INSTALLED -eq 0 ]] && error "No profiles were successfully installed to."
 
-# ── 5. Remind about about:config ────────────────────────────
+# ── 5. Remind about about:config (only if not already set) ──
+# Check prefs.js in every installed profile. If EVERY profile already has
+# the pref set to true, the reminder is unnecessary — skip the yellow box
+# and just note it was already enabled. If ANY profile is missing it,
+# show the reminder (and, if partial, list which profiles need it).
+
+_pref_missing_count=0
+_pref_missing_profiles=()
+for PROFILE_DIR in "${PROFILE_DIRS[@]}"; do
+  [[ ! -d "$PROFILE_DIR" ]] && continue
+  if ! grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets.*true' \
+         "$PROFILE_DIR/prefs.js" 2>/dev/null; then
+    _pref_missing_count=$((_pref_missing_count + 1))
+    _pref_missing_profiles+=("$(basename "$PROFILE_DIR")")
+  fi
+done
 
 echo ""
-echo -e "${YELLOW}┌─────────────────────────────────────────────────────┐${NC}"
-echo -e "${YELLOW}│  Almost done — one manual step required in Zen:     │${NC}"
-echo -e "${YELLOW}│                                                     │${NC}"
-echo -e "${YELLOW}│  1. Open Zen and go to: about:config                │${NC}"
-echo -e "${YELLOW}│  2. Search: toolkit.legacyUserProfileCustomizations │${NC}"
-echo -e "${YELLOW}│             .stylesheets                            │${NC}"
-echo -e "${YELLOW}│  3. Set it to: true                                 │${NC}"
-echo -e "${YELLOW}│  4. Restart Zen                                     │${NC}"
-echo -e "${YELLOW}│                                                     │${NC}"
-echo -e "${YELLOW}│  The dev banner will appear on localhost URLs.      │${NC}"
-echo -e "${YELLOW}└─────────────────────────────────────────────────────┘${NC}"
+if [[ $_pref_missing_count -eq 0 ]]; then
+  success "✔ toolkit.legacyUserProfileCustomizations.stylesheets already enabled — no manual step needed."
+else
+  echo -e "${YELLOW}┌─────────────────────────────────────────────────────┐${NC}"
+  echo -e "${YELLOW}│  Almost done — one manual step required in Zen:     │${NC}"
+  echo -e "${YELLOW}│                                                     │${NC}"
+  echo -e "${YELLOW}│  1. Open Zen and go to: about:config                │${NC}"
+  echo -e "${YELLOW}│  2. Search: toolkit.legacyUserProfileCustomizations │${NC}"
+  echo -e "${YELLOW}│             .stylesheets                            │${NC}"
+  echo -e "${YELLOW}│  3. Set it to: true                                 │${NC}"
+  echo -e "${YELLOW}│  4. Restart Zen                                     │${NC}"
+  echo -e "${YELLOW}│                                                     │${NC}"
+  echo -e "${YELLOW}│  The dev banner will appear on localhost URLs.      │${NC}"
+  echo -e "${YELLOW}└─────────────────────────────────────────────────────┘${NC}"
+  if [[ ${#PROFILE_DIRS[@]} -gt 1 && $_pref_missing_count -lt ${#PROFILE_DIRS[@]} ]]; then
+    warn "Needed in: ${_pref_missing_profiles[*]}"
+  fi
+fi
 echo ""
 
 # ── 6. Report status honestly ───────────────────────────────
