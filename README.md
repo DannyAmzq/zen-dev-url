@@ -11,6 +11,15 @@
 
 <!-- MEDIA: side-by-side screenshot — normal vs dev URL -->
 <!-- ![Before and after](docs/media/before-after.png) -->
+### Dev URL Banner
+<img width="1202" height="146" alt="SCR-20260420-oxbw" src="https://github.com/user-attachments/assets/34334967-66e7-45ea-823a-95336bf039f8" />
+
+### Tab Bar with Construction Stripes
+<img width="330" height="88" alt="SCR-20260420-oxgd" src="https://github.com/user-attachments/assets/308bef94-8b2c-47ad-ba9a-41e20cebf9ab" />
+
+### Settings Menu
+<img width="301" height="790" alt="SCR-20260420-oxia" src="https://github.com/user-attachments/assets/3ddac77f-4e33-462b-9ad6-13ef4a39ec74" />
+
 
 When you navigate to a local dev URL, zen-dev-url:
 
@@ -62,13 +71,18 @@ When you navigate to a local dev URL, zen-dev-url:
 - Choose which panel opens automatically (Console / Network / Inspector)
 
 **Actions**
+- Open current URL in a new tab
 - Open current URL in a new private window
+- View page source
+- Copy as `curl` command (properly shell-escaped)
 
 All settings are saved to `about:config` prefs and survive restarts.
 
 ### Keyboard shortcut
 
 `Alt+Shift+D` — toggle dev mode on/off from anywhere.
+
+The forced state is tied to the browser element (tab), so it **persists across navigations in the same tab** — if you force dev mode on while visiting `example.com` and then navigate to `other.com`, the banner stays on. Press `Alt+Shift+D` again or close the tab to clear it.
 
 ### Detected URLs (defaults)
 
@@ -112,12 +126,11 @@ After that, follow the one-time prompt to enable `toolkit.legacyUserProfileCusto
 
 ---
 
-### Windows — PowerShell
+### Windows
 
-Right-click `install.ps1` → **Run with PowerShell**, or from a PowerShell terminal:
+Double-click **`install.bat`** — it handles execution policy automatically. Or from a PowerShell terminal:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass
 .\install.ps1
 ```
 
@@ -133,30 +146,23 @@ Zen Browser ships for Linux in three forms — the install experience differs pe
 
 ---
 
-#### Flatpak *(most common on modern distros)*
+#### Flatpak *(most common on modern distros — partial support)*
 
 ```bash
 bash install.sh
 ```
 
-The script detects the Flatpak install automatically (app ID: `app.zen_browser.zen`) and copies the userscript and CSS into your profile. **However**, the Flatpak app bundle is read-only, so fx-autoconfig's program files (`config.js`) cannot be written there automatically.
+The script auto-detects the Flatpak install (app ID: `app.zen_browser.zen`) and installs:
 
-You need to install fx-autoconfig's profile side manually:
+- ✅ The userscript (to `chrome/JS/`)
+- ✅ The CSS (to `userChrome.css`)
+- ✅ fx-autoconfig's **profile-side** utils (to `chrome/utils/`) — auto-installed from the vendored copy since v20260415-2
 
-```bash
-# Download fx-autoconfig
-curl -fsSL https://github.com/MrOtherGuy/fx-autoconfig/archive/refs/heads/master.zip \
-  -o /tmp/fx-autoconfig.zip
-unzip -q /tmp/fx-autoconfig.zip -d /tmp/fxac
+**What's still manual:** the Flatpak app bundle is a read-only squashfs, so fx-autoconfig's **program-side** files (`config.js`, `config-prefs.js`) can't be placed inside it by any installer. Without those two files the mod does not load.
 
-# Find your profile (path printed by install.sh)
-PROFILE="$HOME/.var/app/app.zen_browser.zen/zen/<your-profile>"
+The installer will print a red `⚠ INSTALL INCOMPLETE` box at the end explaining this — it no longer falsely reports success.
 
-mkdir -p "$PROFILE/chrome/utils"
-cp -r /tmp/fxac/fx-autoconfig-master/profile/chrome/utils/. "$PROFILE/chrome/utils/"
-```
-
-> The program-side `config.js` for Flatpak requires a Flatpak override. Until the Flatpak maintainers add an official hook, the cleanest workaround is to use the **tarball install** instead.
+> **Recommended workaround:** switch to the tarball install of Zen (see next section). The Flatpak path can't be fully fixed without upstream Flatpak maintainer buy-in for a `config.js` override hook.
 
 ---
 
@@ -211,19 +217,16 @@ sudo bash install.sh
 Open a WSL terminal inside this repo's directory:
 
 ```bash
-WINUSER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
-ZEN="/mnt/c/Users/$WINUSER/AppData/Roaming/zen"
-PROFILE=$(awk '/^\[Install/{f=1} f && /^Path=/{print substr($0,6); exit}' "$ZEN/profiles.ini" | tr -d '\r')
-CHROME="$ZEN/$PROFILE/chrome"
-
-cp zen-dev-url-detector.uc.js "$CHROME/JS/" && echo "JS ok"
-sed -i '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css"
-{ printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css" && echo "CSS ok"
+bash install.sh
 ```
 
-Then **fully quit and reopen Zen** (File → Quit, not just close window).
+`install.sh` detects WSL automatically (via `/proc/version`), resolves your Windows username through `cmd.exe`, and targets the Zen install on the Windows side at `%APPDATA%\zen`. It also installs fx-autoconfig's program files into `%PROGRAMFILES%\Zen Browser\` (or `%LOCALAPPDATA%\zen\`) — the same files `install.ps1` handles for native PowerShell.
 
-> **Tip:** this same snippet doubles as your update command — run it any time you pull new changes and restart Zen.
+Multi-channel users don't need to do anything extra — the installer iterates every `Install{hash}` section in `profiles.ini` and installs to all detected channels (release/beta/twilight).
+
+> **Note:** if Zen is installed under `%PROGRAMFILES%\Zen Browser\`, the installer may need Windows Administrator to write `config.js` there. If the check fails it will tell you to either re-launch WSL elevated, or just use `install.ps1` on the PowerShell side instead.
+
+Then **fully quit and reopen Zen** (File → Quit, not just close window).
 
 ---
 
@@ -246,8 +249,7 @@ Then **fully quit and reopen Zen** (File → Quit, not just close window).
 Open the browser console (`Cmd+Option+J` on Mac, `Ctrl+Shift+J` on Windows) after restart. You should see:
 
 ```
-[zen-dev-url] v20260412-24 loaded   ← styled in orange
-[zen-dev-url] self-tests: 15/15 passed
+[zen-dev-url] vYYYYMMDD-N loaded   ← styled in orange
 ```
 
 Then navigate to `http://localhost` — the banner should appear.
@@ -263,24 +265,39 @@ git pull && bash install.sh
 
 ### WSL
 ```bash
-git pull
-
-WINUSER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
-ZEN="/mnt/c/Users/$WINUSER/AppData/Roaming/zen"
-PROFILE=$(awk '/^\[Install/{f=1} f && /^Path=/{print substr($0,6); exit}' "$ZEN/profiles.ini" | tr -d '\r')
-CHROME="$ZEN/$PROFILE/chrome"
-
-cp zen-dev-url-detector.uc.js "$CHROME/JS/" && echo "JS ok"
-sed -i '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css"
-{ printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css" && echo "CSS ok"
+git pull && bash install.sh
 ```
 
-Restart Zen and confirm the version number bumped in the console.
+Same as macOS / Linux — `install.sh` handles WSL natively since v20260415-3. Restart Zen and confirm the version number bumped in the console.
 
-### Windows PowerShell
+### Windows
 ```powershell
 git pull
 .\install.ps1
+```
+
+---
+
+## Installer options
+
+Both `install.sh` and `install.ps1` accept the following flags:
+
+| Flag | PowerShell | What it does |
+|---|---|---|
+| `--help` | `-Help` | Show usage and exit |
+| `--uninstall` | `-Uninstall` | Remove zen-dev-url files from all profiles |
+| `--verify` | `-Verify` | Check that the install is healthy |
+| `--dry-run` | `-DryRun` | Show what would be done, change nothing |
+
+```bash
+# Check if everything is installed correctly
+bash install.sh --verify
+
+# Remove zen-dev-url (leaves fx-autoconfig in place)
+bash install.sh --uninstall
+
+# Preview what the installer will do
+bash install.sh --dry-run
 ```
 
 ---
@@ -295,12 +312,12 @@ You don't need a Linux VM. Since you already have WSL2 (Ubuntu), Docker is the e
 # From WSL2 — mock the Zen Flatpak directory structure
 docker run --rm -it -v "$PWD:/repo" ubuntu:24.04 bash -c "
   apt-get update -q && apt-get install -q -y curl unzip &&
-  # Simulate a Flatpak profile
-  mkdir -p /root/.var/app/app.zen_browser.zen/zen/default &&
-  touch /root/.var/app/app.zen_browser.zen/zen/profiles.ini &&
-  printf '[Install1234]\nDefault=default\n' > /root/.var/app/app.zen_browser.zen/zen/profiles.ini &&
-  mkdir -p /root/.var/app/app.zen_browser.zen/zen/default/chrome &&
-  touch /root/.var/app/app.zen_browser.zen/zen/default/chrome/userChrome.css &&
+  # Simulate a Flatpak profile (must match the 'Default=Profiles/...'
+  # format that the real installer parses from [Install{hash}] sections)
+  ZEN_DIR=/root/.var/app/app.zen_browser.zen/zen &&
+  mkdir -p \$ZEN_DIR/Profiles/default/chrome &&
+  printf '[Install1234]\nDefault=Profiles/default\n' > \$ZEN_DIR/profiles.ini &&
+  touch \$ZEN_DIR/Profiles/default/chrome/userChrome.css &&
   cd /repo &&
   bash install.sh
 "
@@ -324,18 +341,27 @@ Add a workflow to run `install.sh` on a real Linux runner automatically on every
 
 All preferences are under `zen.urlbar.*`. You can tweak them directly in `about:config` or through the gear panel.
 
+**zen-dev-url prefs** (created by this mod):
+
 | Preference | Default | Description |
 |---|---|---|
 | `zen.urlbar.show-dev-indicator` | `true` | Master on/off switch |
 | `zen.urlbar.dev-indicator.include-zero-host` | `true` | Match `0.0.0.0` |
-| `zen.urlbar.dev-indicator.include-local-tlds` | `true` | Match `.local` / `.test` / etc. |
+| `zen.urlbar.dev-indicator.include-local-tlds` | `true` | Match `.local` / `.test` / `.localhost` / `.internal` |
+| `zen.urlbar.dev-indicator.include-file-urls` | `false` | Match `file://` URLs |
 | `zen.urlbar.dev-indicator.custom-ports` | `""` | Comma-separated port list |
-| `zen.urlbar.dev-indicator.custom-patterns` | `""` | Comma-separated glob patterns |
-| `zen.urlbar.dev-indicator.disable-cache` | `false` | Disable HTTP cache |
-| `zen.urlbar.dev-indicator.allow-mixed-content` | `false` | Allow mixed content |
-| `zen.urlbar.dev-indicator.disable-js` | `false` | Disable JavaScript |
-| `zen.urlbar.dev-indicator.auto-open-devtools` | `false` | Auto-open DevTools on nav |
-| `zen.urlbar.dev-indicator.devtools-panel` | `"webconsole"` | Panel opened by auto-open |
+| `zen.urlbar.dev-indicator.custom-patterns` | `""` | Comma-separated glob host patterns |
+| `zen.urlbar.dev-indicator.auto-open-devtools` | `false` | Auto-open DevTools on every dev URL navigation |
+| `zen.urlbar.dev-indicator.auto-open-panel` | `"webconsole"` | Which panel auto-open uses (`webconsole` / `netmonitor` / `inspector`) |
+| `zen.urlbar.dev-indicator.self-tests` | `false` | Run logic self-tests on window open and print results to the console (for contributors) |
+
+**Firefox prefs** (not owned by this mod — the settings panel just toggles them so your changes survive restart):
+
+| Preference | Default | Description |
+|---|---|---|
+| `devtools.cache.disabled` | `false` | Disable HTTP cache |
+| `security.mixed_content.block_active_content` | `true` | Block mixed content (panel toggle is inverted: unchecked = block) |
+| `javascript.enabled` | `true` | JavaScript enabled globally |
 
 ---
 
