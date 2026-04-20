@@ -1,7 +1,7 @@
 # Follow-ups for next session
 
-This file captures open threads across sessions. Claude Code has no cross-session
-memory, so things that need picking up later get written here.
+This file captures open threads across sessions so things that need
+picking up later don't get lost.
 
 ## Open
 
