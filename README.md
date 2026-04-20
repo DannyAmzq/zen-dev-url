@@ -11,6 +11,15 @@
 
 <!-- MEDIA: side-by-side screenshot — normal vs dev URL -->
 <!-- ![Before and after](docs/media/before-after.png) -->
+### Dev URL Banner
+<img width="1202" height="146" alt="SCR-20260420-oxbw" src="https://github.com/user-attachments/assets/34334967-66e7-45ea-823a-95336bf039f8" />
+
+### Tab Bar with Construction Stripes
+<img width="330" height="88" alt="SCR-20260420-oxgd" src="https://github.com/user-attachments/assets/308bef94-8b2c-47ad-ba9a-41e20cebf9ab" />
+
+### Settings Menu
+<img width="301" height="790" alt="SCR-20260420-oxia" src="https://github.com/user-attachments/assets/3ddac77f-4e33-462b-9ad6-13ef4a39ec74" />
+
 
 When you navigate to a local dev URL, zen-dev-url:
 
