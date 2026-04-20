@@ -62,7 +62,10 @@ When you navigate to a local dev URL, zen-dev-url:
 - Choose which panel opens automatically (Console / Network / Inspector)
 
 **Actions**
+- Open current URL in a new tab
 - Open current URL in a new private window
+- View page source
+- Copy as `curl` command (properly shell-escaped)
 
 All settings are saved to `about:config` prefs and survive restarts.
 
@@ -237,7 +240,7 @@ Then **fully quit and reopen Zen** (File → Quit, not just close window).
 Open the browser console (`Cmd+Option+J` on Mac, `Ctrl+Shift+J` on Windows) after restart. You should see:
 
 ```
-[zen-dev-url] v20260414-1 loaded   ← styled in orange
+[zen-dev-url] vYYYYMMDD-N loaded   ← styled in orange
 ```
 
 Then navigate to `http://localhost` — the banner should appear.
