@@ -1,5 +1,8 @@
 # zen-dev-url — dev notes
 
+## Authorship
+All commits, issues, and PRs MUST be authored under DannyAmzq's account. Never reference Claude as the author. If Claude must be referenced for any reason, always co-author DannyAmzq's account. No commit messages, PR descriptions, or issue bodies should attribute work to Claude or AI tooling.
+
 ## Branch
 All development happens on `dev`.
 
@@ -23,15 +26,22 @@ Then fully restart Zen and open the browser console (`Cmd+Option+J` or `Ctrl+Shi
 
 ## Testing on Windows (from WSL)
 
-```bash
-WINUSER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
-ZEN="/mnt/c/Users/$WINUSER/AppData/Roaming/zen"
-PROFILE=$(awk '/Default=1/{f=1} f && /^Path=/{print substr($0,6); exit}' "$ZEN/profiles.ini" | tr -d '\r')
-CHROME="$ZEN/$PROFILE/chrome"
+Loops over every installed Zen channel (release/beta/twilight) automatically.
 
-cp zen-dev-url-detector.uc.js "$CHROME/JS/" && echo "JS copied OK" || echo "JS FAILED"
-sed -i '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css"
-{ printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css" && echo "CSS updated OK" || echo "CSS FAILED"
+```bash
+git pull && {
+  WINUSER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
+  ZEN="/mnt/c/Users/$WINUSER/AppData/Roaming/zen"
+  while IFS= read -r PROFILE; do
+    CHROME="$ZEN/$PROFILE/chrome"
+    echo "→ $(basename "$PROFILE")"
+    cp zen-dev-url-detector.uc.js "$CHROME/JS/" && echo "  JS OK" || echo "  JS FAILED"
+    sed -i '/\/\* zen-dev-url \*\//,$d' "$CHROME/userChrome.css"
+    { printf '\n/* zen-dev-url */\n'; cat zen-dev-url.css; } >> "$CHROME/userChrome.css" && echo "  CSS OK" || echo "  CSS FAILED"
+  done < <(awk '/^\[Install/{f=1;next} /^\[/{f=0} f && /^Default=Profiles\//{print substr($0,9)}' \
+    "$ZEN/profiles.ini" | tr -d '\r')
+  echo "Done — restart Zen."
+}
 ```
 
 ## Version verification
