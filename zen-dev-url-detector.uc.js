@@ -382,6 +382,7 @@
         btn.id = id;
         btn.className = 'zen-dev-url-btn';
         btn.title = title;
+        btn.addEventListener('mousedown', (e) => e.preventDefault());
         btn.addEventListener('click', action);
         return btn;
       };
