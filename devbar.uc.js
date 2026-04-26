@@ -22,8 +22,8 @@
   const DEVBAR_VERSION = '20260426-2';
   console.log(`%c[devbar] v${DEVBAR_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
-  // Prevent double-init across window reloads
-  if (window.__devbar) return;
+  // Prevent double-init across window reloads (also blocks old zen-dev-url copy)
+  if (window.__devbar || window.__zenDevUrlDetector) return;
 
   const detector = {
     /** about:config preference key that enables/disables the indicator */
