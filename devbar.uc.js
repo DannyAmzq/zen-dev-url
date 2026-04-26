@@ -19,7 +19,7 @@
  */
 
 (function () {
-  const DEVBAR_VERSION = '20260426-1';
+  const DEVBAR_VERSION = '20260426-2';
   console.log(`%c[devbar] v${DEVBAR_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
@@ -154,33 +154,41 @@
         }
       }, { capture: true, mozSystemGroup: true });
 
-      // Tab context menu item — "Toggle Devbar"
-      const tabMenu = document.getElementById('tabContextMenu');
-      if (tabMenu) {
-        const menuItem = document.createXULElement('menuitem');
-        menuItem.id = 'devbar-context-toggle';
-        menuItem.setAttribute('label', 'Toggle Devbar');
-        menuItem.addEventListener('command', () => {
-          const browser = gBrowser.selectedBrowser;
-          const forced = this._forcedBrowsers.has(browser);
-          const excluded = this._excludedBrowsers.has(browser);
-          const currentlyShowing = (this._isDevUri(gBrowser.currentURI) && !excluded) || forced;
-          if (currentlyShowing) {
-            this._forcedBrowsers.delete(browser);
-            this._excludedBrowsers.add(browser);
-            this._showToast('Devbar off !');
-          } else {
-            this._excludedBrowsers.delete(browser);
-            this._forcedBrowsers.add(browser);
-            this._showToast('Devbar on !');
-          }
-          this._update();
-        });
+      // Shared toggle handler for context menu items
+      const toggleDevbar = () => {
+        const browser = gBrowser.selectedBrowser;
+        const forced = this._forcedBrowsers.has(browser);
+        const excluded = this._excludedBrowsers.has(browser);
+        const currentlyShowing = (this._isDevUri(gBrowser.currentURI) && !excluded) || forced;
+        if (currentlyShowing) {
+          this._forcedBrowsers.delete(browser);
+          this._excludedBrowsers.add(browser);
+          this._showToast('Devbar off !');
+        } else {
+          this._excludedBrowsers.delete(browser);
+          this._forcedBrowsers.add(browser);
+          this._showToast('Devbar on !');
+        }
+        this._update();
+      };
+
+      const addMenuToggle = (menuId, itemId, sepId) => {
+        const menu = document.getElementById(menuId);
+        if (!menu) return;
         const sep = document.createXULElement('menuseparator');
-        sep.id = 'devbar-context-sep';
-        tabMenu.appendChild(sep);
-        tabMenu.appendChild(menuItem);
-      }
+        sep.id = sepId;
+        const menuItem = document.createXULElement('menuitem');
+        menuItem.id = itemId;
+        menuItem.setAttribute('label', 'Toggle Devbar');
+        menuItem.addEventListener('command', toggleDevbar);
+        menu.appendChild(sep);
+        menu.appendChild(menuItem);
+      };
+
+      // Tab context menu (right-click on tab)
+      addMenuToggle('tabContextMenu', 'devbar-context-toggle', 'devbar-context-sep');
+      // Page context menu (right-click on page content)
+      addMenuToggle('contentAreaContextMenu', 'devbar-page-toggle', 'devbar-page-sep');
 
       this._update();
     },
