@@ -1,8 +1,8 @@
 # ============================================================
-# zen-dev-url installer — Windows (PowerShell)
+# devbar installer — Windows (PowerShell)
 # ============================================================
 # NOTE: Any existing userChrome.css content is preserved.
-#       This script appends zen-dev-url styles rather than
+#       This script appends devbar styles rather than
 #       overwriting, and is safe to re-run (idempotent).
 # ============================================================
 
@@ -15,26 +15,26 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-function Info    { param($msg) Write-Host "[zen-dev-url] $msg" -ForegroundColor Cyan }
-function Success { param($msg) Write-Host "[zen-dev-url] $msg" -ForegroundColor Green }
-function Warn    { param($msg) Write-Host "[zen-dev-url] $msg" -ForegroundColor Yellow }
-function Fail    { param($msg) Write-Host "[zen-dev-url] $msg" -ForegroundColor Red; exit 1 }
+function Info    { param($msg) Write-Host "[devbar] $msg" -ForegroundColor Cyan }
+function Success { param($msg) Write-Host "[devbar] $msg" -ForegroundColor Green }
+function Warn    { param($msg) Write-Host "[devbar] $msg" -ForegroundColor Yellow }
+function Fail    { param($msg) Write-Host "[devbar] $msg" -ForegroundColor Red; exit 1 }
 
 # ── 0. Parse flags ──────────────────────────────────────────
 
 if ($Help) {
   Write-Host @"
-zen-dev-url installer — Windows (PowerShell)
+devbar installer — Windows (PowerShell)
 
 Usage: .\install.ps1 [OPTIONS]
 
 Options:
   -Help         Show this help message and exit
-  -Uninstall    Remove zen-dev-url files from all detected profiles
-  -Verify       Check whether zen-dev-url is correctly installed
+  -Uninstall    Remove devbar files from all detected profiles
+  -Verify       Check whether devbar is correctly installed
   -DryRun       Show what would be done without making changes
 
-Without options, installs zen-dev-url to all detected Zen profiles.
+Without options, installs devbar to all detected Zen profiles.
 "@
   exit 0
 }
@@ -47,13 +47,13 @@ else                { $Mode = "install" }
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # Print version
-$verLine = Select-String -Path "$ScriptDir\zen-dev-url-detector.uc.js" -Pattern "ZEN_DEV_URL_VERSION\s*=\s*'([^']+)'" | Select-Object -First 1
+$verLine = Select-String -Path "$ScriptDir\devbar.uc.js" -Pattern "DEVBAR_VERSION\s*=\s*'([^']+)'" | Select-Object -First 1
 if ($verLine -and $verLine.Matches.Groups.Count -gt 1) {
   $Version = $verLine.Matches.Groups[1].Value
 } else {
   $Version = "unknown"
 }
-Info "zen-dev-url v$Version — $Mode"
+Info "devbar v$Version — $Mode"
 
 # ── 1. Find Zen installation ─────────────────────────────────
 
@@ -139,7 +139,7 @@ if ($Mode -eq "verify") {
   foreach ($ProfileDir in $ProfileDirs) {
     if ($ProfileDirs.Count -gt 1) { Info "─── $(Split-Path -Leaf $ProfileDir) ───" }
 
-    $js = Join-Path $ProfileDir "chrome\JS\zen-dev-url-detector.uc.js"
+    $js = Join-Path $ProfileDir "chrome\JS\devbar.uc.js"
     if (Test-Path $js) {
       Success "✔ Userscript installed"; $Pass++
     } else {
@@ -147,7 +147,7 @@ if ($Mode -eq "verify") {
     }
 
     $css = Join-Path $ProfileDir "chrome\userChrome.css"
-    if ((Test-Path $css) -and (Get-Content $css -Raw) -match [regex]::Escape("/* zen-dev-url */")) {
+    if ((Test-Path $css) -and (Get-Content $css -Raw) -match [regex]::Escape("/* devbar */")) {
       Success "✔ CSS styles present in userChrome.css"; $Pass++
     } else {
       Warn "✘ CSS styles MISSING from userChrome.css"; $FailCount++
@@ -185,7 +185,7 @@ if ($Mode -eq "uninstall") {
     if ($ProfileDirs.Count -gt 1) { Info "─── $(Split-Path -Leaf $ProfileDir) ───" }
 
     # Remove userscript
-    $js = Join-Path $ProfileDir "chrome\JS\zen-dev-url-detector.uc.js"
+    $js = Join-Path $ProfileDir "chrome\JS\devbar.uc.js"
     if (Test-Path $js) {
       Remove-Item $js -Force
       Success "Removed userscript"
@@ -195,7 +195,7 @@ if ($Mode -eq "uninstall") {
 
     # Strip CSS block (from marker to EOF)
     $css = Join-Path $ProfileDir "chrome\userChrome.css"
-    $Marker = "/* zen-dev-url */"
+    $Marker = "/* devbar */"
     if ((Test-Path $css) -and (Get-Content $css -Raw) -match [regex]::Escape($Marker)) {
       $lines = Get-Content $css
       $idx = ($lines | Select-String -SimpleMatch $Marker | Select-Object -First 1).LineNumber - 1
@@ -204,9 +204,9 @@ if ($Mode -eq "uninstall") {
       } else {
         Set-Content $css "" -Encoding UTF8
       }
-      Success "Removed zen-dev-url styles from userChrome.css"
+      Success "Removed devbar styles from userChrome.css"
     } else {
-      Warn "No zen-dev-url styles found in userChrome.css, skipping"
+      Warn "No devbar styles found in userChrome.css, skipping"
     }
 
     $Removed++
@@ -239,12 +239,12 @@ if ($Mode -eq "dry-run") {
   foreach ($ProfileDir in $ProfileDirs) {
     Info "  Profile: $(Split-Path -Leaf $ProfileDir)"
     Info "    • Copy fx-autoconfig utils → chrome\utils\"
-    Info "    • Copy zen-dev-url-detector.uc.js → chrome\JS\"
+    Info "    • Copy devbar.uc.js → chrome\JS\"
     $css = Join-Path $ProfileDir "chrome\userChrome.css"
-    if ((Test-Path $css) -and (Get-Content $css -Raw) -match [regex]::Escape("/* zen-dev-url */")) {
+    if ((Test-Path $css) -and (Get-Content $css -Raw) -match [regex]::Escape("/* devbar */")) {
       Info "    • CSS already present (skip)"
     } else {
-      Info "    • Append zen-dev-url.css → userChrome.css"
+      Info "    • Append devbar.css → userChrome.css"
     }
   }
 
@@ -296,14 +296,14 @@ foreach ($ProfileDir in $ProfileDirs) {
   # Userscript
   $JsDir = Join-Path $ProfileDir "chrome\JS"
   New-Item -ItemType Directory -Force -Path $JsDir | Out-Null
-  Copy-Item "$ScriptDir\zen-dev-url-detector.uc.js" $JsDir -Force
+  Copy-Item "$ScriptDir\devbar.uc.js" $JsDir -Force
   Success "Copied userscript to $JsDir"
 
-  # CSS — always refresh. If an existing zen-dev-url block is present,
+  # CSS — always refresh. If an existing devbar block is present,
   # strip everything from the marker to EOF and re-append, so re-running
   # install.ps1 picks up CSS changes (icons, stripe colors, etc).
   $ChromeCss = Join-Path $ProfileDir "chrome\userChrome.css"
-  $Marker    = "/* zen-dev-url */"
+  $Marker    = "/* devbar */"
   if ((Test-Path $ChromeCss) -and (Get-Content $ChromeCss -Raw) -match [regex]::Escape($Marker)) {
     $lines = Get-Content $ChromeCss
     $idx = ($lines | Select-String -SimpleMatch $Marker | Select-Object -First 1).LineNumber - 1
@@ -312,9 +312,9 @@ foreach ($ProfileDir in $ProfileDirs) {
     } else {
       Set-Content $ChromeCss "" -Encoding UTF8
     }
-    Info "Stripped existing zen-dev-url styles before re-appending."
+    Info "Stripped existing devbar styles before re-appending."
   }
-  $cssContent = "`n$Marker`n" + (Get-Content "$ScriptDir\zen-dev-url.css" -Raw)
+  $cssContent = "`n$Marker`n" + (Get-Content "$ScriptDir\devbar.css" -Raw)
   Add-Content -Path $ChromeCss -Value $cssContent -Encoding UTF8
   Success "Appended styles to $ChromeCss"
 
@@ -335,7 +335,7 @@ Write-Host "│             .stylesheets                            │" -Foregr
 Write-Host "│  3. Set it to: true                                 │" -ForegroundColor Yellow
 Write-Host "│  4. Restart Zen                                     │" -ForegroundColor Yellow
 Write-Host "│                                                     │" -ForegroundColor Yellow
-Write-Host "│  The dev banner will appear on localhost URLs.      │" -ForegroundColor Yellow
+Write-Host "│  Devbar will appear on localhost URLs.      │" -ForegroundColor Yellow
 Write-Host "└─────────────────────────────────────────────────────┘" -ForegroundColor Yellow
 Write-Host ""
 Success "Installation complete! ($Installed profile(s) updated)"

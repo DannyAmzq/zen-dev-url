@@ -1,33 +1,33 @@
 // ==UserScript==
-// @name           zen-dev-url-detector
+// @name           devbar
 // @description    Highlights the URL bar and shows a dev banner when on localhost or local dev URLs
 // ==/UserScript==
 
 /**
- * zen-dev-url-detector
+ * devbar
  *
  * Detects when the active tab is on a local dev URL (localhost, 127.0.0.1,
- * file://, .local TLDs, etc.) and toggles a `zen-dev-url` attribute on the
- * document root. CSS in zen-dev-url.css uses that attribute to show the dev
+ * file://, .local TLDs, etc.) and toggles a `devbar` attribute on the
+ * document root. CSS in devbar.css uses that attribute to show the dev
  * banner and highlight the sidebar URL bar.
  *
  * Requires fx-autoconfig to load this script:
  * https://github.com/MrOtherGuy/fx-autoconfig
  *
  * Toggle the feature via about:config:
- *   zen.urlbar.show-dev-indicator = true/false
+ *   devbar.enabled = true/false
  */
 
 (function () {
-  const ZEN_DEV_URL_VERSION = '20260418-10';
-  console.log(`%c[zen-dev-url] v${ZEN_DEV_URL_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
+  const DEVBAR_VERSION = '20260426-1';
+  console.log(`%c[devbar] v${DEVBAR_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads
-  if (window.__zenDevUrlDetector) return;
+  if (window.__devbar) return;
 
   const detector = {
     /** about:config preference key that enables/disables the indicator */
-    PREF: 'zen.urlbar.show-dev-indicator',
+    PREF: 'devbar.enabled',
 
     /** Exact hostnames always treated as dev.
      *  Note: nsIURI.host returns IPv6 addresses WITHOUT brackets
@@ -64,8 +64,8 @@
      */
     _readPrefs() {
       const sp = Services.prefs;
-      const rawPorts    = sp.getStringPref('zen.urlbar.dev-indicator.custom-ports', '');
-      const rawPatterns = sp.getStringPref('zen.urlbar.dev-indicator.custom-patterns', '');
+      const rawPorts    = sp.getStringPref('devbar.custom-ports', '');
+      const rawPatterns = sp.getStringPref('devbar.custom-patterns', '');
 
       // Pre-parse ports into a Set for O(1) lookup in _isDevUri
       const portSet = new Set(
@@ -84,13 +84,13 @@
 
       this._prefs = {
         enabled:          sp.getBoolPref(this.PREF, true),
-        includeFileUrls:  sp.getBoolPref('zen.urlbar.dev-indicator.include-file-urls', false),
-        includeZeroHost:  sp.getBoolPref('zen.urlbar.dev-indicator.include-zero-host', true),
-        includeLocalTLDs: sp.getBoolPref('zen.urlbar.dev-indicator.include-local-tlds', true),
+        includeFileUrls:  sp.getBoolPref('devbar.include-file-urls', false),
+        includeZeroHost:  sp.getBoolPref('devbar.include-zero-host', true),
+        includeLocalTLDs: sp.getBoolPref('devbar.include-local-tlds', true),
         portSet,
         patternRes,
-        autoOpenDevtools: sp.getBoolPref('zen.urlbar.dev-indicator.auto-open-devtools', false),
-        autoOpenPanel:    sp.getStringPref('zen.urlbar.dev-indicator.auto-open-panel', 'webconsole'),
+        autoOpenDevtools: sp.getBoolPref('devbar.auto-open-devtools', false),
+        autoOpenPanel:    sp.getStringPref('devbar.auto-open-panel', 'webconsole'),
       };
     },
 
@@ -110,21 +110,21 @@
       // Listen for pref changes — _readPrefs() + _update() run on each change
       for (const key of [
         this.PREF,
-        'zen.urlbar.dev-indicator.include-zero-host',
-        'zen.urlbar.dev-indicator.include-local-tlds',
-        'zen.urlbar.dev-indicator.include-file-urls',
-        'zen.urlbar.dev-indicator.custom-ports',
-        'zen.urlbar.dev-indicator.custom-patterns',
-        'zen.urlbar.dev-indicator.auto-open-devtools',
-        'zen.urlbar.dev-indicator.auto-open-panel',
+        'devbar.include-zero-host',
+        'devbar.include-local-tlds',
+        'devbar.include-file-urls',
+        'devbar.custom-ports',
+        'devbar.custom-patterns',
+        'devbar.auto-open-devtools',
+        'devbar.auto-open-panel',
       ]) {
         Services.prefs.addObserver(key, this);
       }
       // Top-level error handler: tag any uncaught error from our script so bug
       // reports include a recognisable prefix rather than a bare stack trace.
       window.addEventListener('error', (e) => {
-        if (e.filename?.includes('zen-dev-url-detector.uc.js')) {
-          console.error('[zen-dev-url] FATAL:', e.message, 'at', `${e.filename}:${e.lineno}`);
+        if (e.filename?.includes('devbar.uc.js')) {
+          console.error('[devbar] FATAL:', e.message, 'at', `${e.filename}:${e.lineno}`);
         }
       }, true);
       // Alt+Shift+D toggles dev mode for the current tab.
@@ -144,22 +144,22 @@
           if (currentlyShowing) {
             this._forcedBrowsers.delete(browser);
             this._excludedBrowsers.add(browser);
-            this._showToast('Dev banner off !');
+            this._showToast('Devbar off !');
           } else {
             this._excludedBrowsers.delete(browser);
             this._forcedBrowsers.add(browser);
-            this._showToast('Dev banner on !');
+            this._showToast('Devbar on !');
           }
           this._update();
         }
       }, { capture: true, mozSystemGroup: true });
 
-      // Tab context menu item — "Toggle Dev Banner"
+      // Tab context menu item — "Toggle Devbar"
       const tabMenu = document.getElementById('tabContextMenu');
       if (tabMenu) {
         const menuItem = document.createXULElement('menuitem');
-        menuItem.id = 'zen-dev-url-context-toggle';
-        menuItem.setAttribute('label', 'Toggle Dev Banner');
+        menuItem.id = 'devbar-context-toggle';
+        menuItem.setAttribute('label', 'Toggle Devbar');
         menuItem.addEventListener('command', () => {
           const browser = gBrowser.selectedBrowser;
           const forced = this._forcedBrowsers.has(browser);
@@ -168,16 +168,16 @@
           if (currentlyShowing) {
             this._forcedBrowsers.delete(browser);
             this._excludedBrowsers.add(browser);
-            this._showToast('Dev banner off !');
+            this._showToast('Devbar off !');
           } else {
             this._excludedBrowsers.delete(browser);
             this._forcedBrowsers.add(browser);
-            this._showToast('Dev banner on !');
+            this._showToast('Devbar on !');
           }
           this._update();
         });
         const sep = document.createXULElement('menuseparator');
-        sep.id = 'zen-dev-url-context-sep';
+        sep.id = 'devbar-context-sep';
         tabMenu.appendChild(sep);
         tabMenu.appendChild(menuItem);
       }
@@ -190,14 +190,14 @@
         const { DevToolsShim } = ChromeUtils.importESModule('chrome://devtools-startup/content/DevToolsShim.sys.mjs');
         return DevToolsShim;
       } catch (e) {
-        console.error('[zen-dev-url] could not load DevToolsShim:', e);
+        console.error('[devbar] could not load DevToolsShim:', e);
         return null;
       }
     },
 
     _createBanner() {
       const banner = document.createXULElement('hbox');
-      banner.id = 'zen-dev-url-banner';
+      banner.id = 'devbar-banner';
 
       // ── URL Bar (bridges to gURLBar) ──────────────────────────────
       // The banner's URL field is a styled DISPLAY of the current URL. When
@@ -207,16 +207,16 @@
       // too. We do NOT reposition the popup — Zen handles it in its usual spot.
 
       const log = (...args) => {
-        if (Services.prefs.getBoolPref('zen.urlbar.dev-indicator.self-tests', false))
-          console.log('[zen-dev-url:urlbar]', ...args);
+        if (Services.prefs.getBoolPref('devbar.self-tests', false))
+          console.log('[devbar:urlbar]', ...args);
       };
 
       // Wrapper lets the field sit alongside buttons with correct flex layout
       const wrapper = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
-      wrapper.id = 'zen-dev-url-field-wrapper';
+      wrapper.id = 'devbar-field-wrapper';
 
       const field = document.createElementNS('http://www.w3.org/1999/xhtml', 'input');
-      field.id = 'zen-dev-url-field';
+      field.id = 'devbar-field';
       field.type = 'text';
       field.spellcheck = false;
       field.autocomplete = 'off';
@@ -334,7 +334,7 @@
             });
             log('navigating to', url);
           } catch (err) {
-            console.error('[zen-dev-url] navigation failed:', err);
+            console.error('[devbar] navigation failed:', err);
           }
           field.blur();
         } else if (e.key === 'Escape') {
@@ -402,14 +402,14 @@
 
       const makeSeparator = () => {
         const sep = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
-        sep.className = 'zen-dev-url-separator';
+        sep.className = 'devbar-separator';
         return sep;
       };
 
       const makeBtn = (id, title, action) => {
         const btn = document.createElementNS('http://www.w3.org/1999/xhtml', 'button');
         btn.id = id;
-        btn.className = 'zen-dev-url-btn';
+        btn.className = 'devbar-btn';
         btn.title = title;
         btn.addEventListener('mousedown', (e) => e.preventDefault());
         btn.addEventListener('click', action);
@@ -418,7 +418,7 @@
 
       // Copy URL button — Zen's gZenCommonActions already shows its own
       // toast/notification, so we don't fire a second one here.
-      const copyBtn = makeBtn('zen-dev-url-copy-link', 'Copy URL', () => {
+      const copyBtn = makeBtn('devbar-copy-link', 'Copy URL', () => {
         gZenCommonActions.copyCurrentURLToClipboard();
         copyBtn.setAttribute('data-copied', '');
         setTimeout(() => copyBtn.removeAttribute('data-copied'), 1500);
@@ -429,7 +429,7 @@
       // This Zen build's nsIClearDataService uses the OLD callback-based API —
       // the 4th argument is a required { onDataDeleted() } callback, not a Promise.
       // We pick whichever method is available and always pass the callback.
-      const clearSiteData = makeBtn('zen-dev-url-clear-data', 'Clear site data + hard reload', () => {
+      const clearSiteData = makeBtn('devbar-clear-data', 'Clear site data + hard reload', () => {
         try {
           const uri = gBrowser.currentURI;
           let host;
@@ -455,12 +455,12 @@
           ).bind(Services.clearData);
           fn(host, false, flags, cb);
         } catch (e) {
-          console.error('[zen-dev-url] clear site data failed:', e);
+          console.error('[devbar] clear site data failed:', e);
         }
       });
 
       // Reload — grouped visually with clear-data (both are page-state tools)
-      const reloadBtn = makeBtn('zen-dev-url-clear-refresh', 'Clear cache and reload', () => {
+      const reloadBtn = makeBtn('devbar-clear-refresh', 'Clear cache and reload', () => {
         gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
         detector._showToast('Hard reloaded !');
       });
@@ -468,7 +468,7 @@
       // Screenshot button — grouped with devtools (it's a dev capture tool).
       // toggleScreenshot toggles the panel visibility, so the toast verb depends
       // on whether the panel was visible before this click.
-      const screenshotBtn = makeBtn('zen-dev-url-screenshot', 'Take screenshot',
+      const screenshotBtn = makeBtn('devbar-screenshot', 'Take screenshot',
         () => toggleScreenshot());
 
       // DevTools toggles report which tool is opening/closing in the toast.
@@ -486,7 +486,7 @@
 
       // DevTools group: inspector, console, network (separate from page tools)
       const devButtons = [
-        makeBtn('zen-dev-url-inspector', 'Inspect element', () => {
+        makeBtn('devbar-inspector', 'Inspect element', () => {
           const dt = getDevTools();
           if (!dt) return;
           const toolbox = dt.getToolboxForTab(gBrowser.selectedTab);
@@ -499,15 +499,15 @@
           // Open inspector and immediately activate the node picker
           dt.showToolboxForTab(gBrowser.selectedTab, { toolId: 'inspector' })
             .then(tb => tb?.nodePicker?.start(tb.currentTarget, tb))
-            .catch(e => console.error('[zen-dev-url] picker error:', e));
+            .catch(e => console.error('[devbar] picker error:', e));
           detector._showToast('Inspector opened !');
         }),
-        makeBtn('zen-dev-url-console', 'Open console', () => {
+        makeBtn('devbar-console', 'Open console', () => {
           const msg = devToolsToast('Console', 'webconsole');
           togglePanel('webconsole');
           if (msg) detector._showToast(msg);
         }),
-        makeBtn('zen-dev-url-network', 'Open network panel', () => {
+        makeBtn('devbar-network', 'Open network panel', () => {
           const msg = devToolsToast('Network panel', 'netmonitor');
           togglePanel('netmonitor');
           if (msg) detector._showToast(msg);
@@ -516,7 +516,7 @@
 
       // Viewport size readout — updated on resize and tab/navigation changes
       const viewportEl = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
-      viewportEl.id = 'zen-dev-url-viewport';
+      viewportEl.id = 'devbar-viewport';
 
       // Layout: [wrapper(field+input+dropdown)] [copy] | sep | [clear-data] [reload] | sep | [screenshot] [inspector] [console] [network] | sep | [viewport] | sep | [gear]
       banner.appendChild(wrapper);
@@ -532,7 +532,7 @@
       banner.appendChild(makeSeparator());
       banner.appendChild(viewportEl);
       banner.appendChild(makeSeparator());
-      const settingsBtn = makeBtn('zen-dev-url-settings', 'Settings', () => detector._openSettings());
+      const settingsBtn = makeBtn('devbar-settings', 'Settings', () => detector._openSettings());
       banner.appendChild(settingsBtn);
 
       // Append inside #browser, not documentElement. #browser creates a
@@ -572,7 +572,7 @@
           this._tabpanelsObserver.observe(tabpanels);
         }
       } catch (e) {
-        console.error('[zen-dev-url] ResizeObserver setup failed:', e);
+        console.error('[devbar] ResizeObserver setup failed:', e);
       }
     },
 
@@ -634,7 +634,7 @@
 
     /**
      * Recalculates whether the current tab is a dev URL and updates the
-     * `zen-dev-url` attribute on the document root accordingly.
+     * `devbar` attribute on the document root accordingly.
      * @param {nsIURI} [uri] - Override URI; defaults to the current tab's URI
      */
     _update(uri) {
@@ -643,7 +643,7 @@
       const forced = this._forcedBrowsers.has(browser);
       const excluded = this._excludedBrowsers.has(browser);
       const isDev = this._prefs?.enabled && ((this._isDevUri(currentUri) && !excluded) || forced);
-      document.documentElement.toggleAttribute('zen-dev-url', isDev);
+      document.documentElement.toggleAttribute('devbar', isDev);
       if (!isDev && this._isEditing && this._exitEditMode) {
         this._exitEditMode();
       }
@@ -679,7 +679,7 @@
       // showToast's element creation is synchronous (before its first await),
       // so lastElementChild of the container is our toast right after the call.
       try {
-        const toastId = 'zen-dev-url-' + (msg.includes('on') ? 'on' : 'off');
+        const toastId = 'devbar-' + (msg.includes('on') ? 'on' : 'off');
         gZenUIManager.showToast(toastId, { timeout: 1800 });
         const label = document
           .getElementById('zen-toast-container')
@@ -692,10 +692,10 @@
         }
       } catch {
         // Fallback if Zen internals unavailable
-        let toast = document.getElementById('zen-dev-url-toast');
+        let toast = document.getElementById('devbar-toast');
         if (!toast) {
           toast = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
-          toast.id = 'zen-dev-url-toast';
+          toast.id = 'devbar-toast';
           document.documentElement.appendChild(toast);
         }
         clearTimeout(this._toastTimer);
@@ -716,13 +716,13 @@
      */
     _makeToggleRow(labelText, prefKey, defaultVal, invert = false) {
       const row = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
-      row.className = 'zen-dev-url-toggle-row';
+      row.className = 'devbar-toggle-row';
 
       const label = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
       label.textContent = labelText;
 
       const toggleLabel = document.createElementNS('http://www.w3.org/1999/xhtml', 'label');
-      toggleLabel.className = 'zen-dev-url-toggle';
+      toggleLabel.className = 'devbar-toggle';
 
       const input = document.createElementNS('http://www.w3.org/1999/xhtml', 'input');
       input.type = 'checkbox';
@@ -736,7 +736,7 @@
       });
 
       const track = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
-      track.className = 'zen-dev-url-toggle-track';
+      track.className = 'devbar-toggle-track';
 
       toggleLabel.appendChild(input);
       toggleLabel.appendChild(track);
@@ -755,13 +755,13 @@
      */
     _makeSelectRow(labelText, prefKey, options, defaultVal) {
       const row = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
-      row.className = 'zen-dev-url-toggle-row';
+      row.className = 'devbar-toggle-row';
 
       const label = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
       label.textContent = labelText;
 
       const select = document.createElementNS('http://www.w3.org/1999/xhtml', 'select');
-      select.className = 'zen-dev-url-select';
+      select.className = 'devbar-select';
       select.dataset.pref = prefKey;
       const current = Services.prefs.getStringPref(prefKey, defaultVal);
       for (const opt of options) {
@@ -788,7 +788,7 @@
      */
     _makeSectionHeader(text) {
       const el = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
-      el.className = 'zen-dev-url-section-header';
+      el.className = 'devbar-section-header';
       el.textContent = text;
       return el;
     },
@@ -799,7 +799,7 @@
      */
     _makePanelDivider() {
       const el = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
-      el.className = 'zen-dev-url-panel-divider';
+      el.className = 'devbar-panel-divider';
       return el;
     },
 
@@ -813,14 +813,14 @@
      */
     _makeTextRow(labelText, prefKey, placeholder) {
       const row = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
-      row.className = 'zen-dev-url-text-row';
+      row.className = 'devbar-text-row';
 
       const label = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
       label.textContent = labelText;
 
       const input = document.createElementNS('http://www.w3.org/1999/xhtml', 'input');
       input.type = 'text';
-      input.className = 'zen-dev-url-text-input';
+      input.className = 'devbar-text-input';
       input.dataset.pref = prefKey;
       input.placeholder = placeholder;
       input.value = Services.prefs.getStringPref(prefKey, '');
@@ -851,15 +851,15 @@
      */
     _makeActionRow(labelText, iconUrl, action) {
       const row = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
-      row.className = 'zen-dev-url-action-row';
+      row.className = 'devbar-action-row';
       const btn = document.createElementNS('http://www.w3.org/1999/xhtml', 'button');
-      btn.className = 'zen-dev-url-action-btn';
+      btn.className = 'devbar-action-btn';
       const icon = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
-      icon.className = 'zen-dev-url-action-icon';
+      icon.className = 'devbar-action-icon';
       icon.style.maskImage = `url("${iconUrl}")`;
       icon.style.webkitMaskImage = `url("${iconUrl}")`;
       const labelNode = document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
-      labelNode.className = 'zen-dev-url-action-label';
+      labelNode.className = 'devbar-action-label';
       labelNode.textContent = labelText;
       btn.appendChild(icon);
       btn.appendChild(labelNode);
@@ -878,33 +878,33 @@
      */
     _createSettingsPanel() {
       const panel = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
-      panel.id = 'zen-dev-url-settings-panel';
+      panel.id = 'devbar-settings-panel';
 
       // ── Detection ─────────────────────────────────────────────
       panel.appendChild(this._makeSectionHeader('Detection'));
       panel.appendChild(this._makeToggleRow(
         'Show for 0.0.0.0',
-        'zen.urlbar.dev-indicator.include-zero-host',
+        'devbar.include-zero-host',
         true
       ));
       panel.appendChild(this._makeToggleRow(
         'Show for .local / .test / .internal',
-        'zen.urlbar.dev-indicator.include-local-tlds',
+        'devbar.include-local-tlds',
         true
       ));
       panel.appendChild(this._makeToggleRow(
         'Show for file://',
-        'zen.urlbar.dev-indicator.include-file-urls',
+        'devbar.include-file-urls',
         false
       ));
       panel.appendChild(this._makeTextRow(
         'Custom ports',
-        'zen.urlbar.dev-indicator.custom-ports',
+        'devbar.custom-ports',
         '3000, 5173, 8080, 8000'
       ));
       panel.appendChild(this._makeTextRow(
         'Custom host patterns',
-        'zen.urlbar.dev-indicator.custom-patterns',
+        'devbar.custom-patterns',
         '*.vercel.app, *.ngrok.io, *.loca.lt'
       ));
 
@@ -937,14 +937,14 @@
       panel.appendChild(this._makeSectionHeader('DevTools'));
       const autoOpenRow = this._makeToggleRow(
         'Auto-open DevTools on dev URLs',
-        'zen.urlbar.dev-indicator.auto-open-devtools',
+        'devbar.auto-open-devtools',
         false
       );
       panel.appendChild(autoOpenRow);
       // Panel selector — indented sub-option, only active when auto-open is on
       const panelSelectRow = this._makeSelectRow(
         'Panel',
-        'zen.urlbar.dev-indicator.auto-open-panel',
+        'devbar.auto-open-panel',
         [
           { value: 'webconsole', label: 'Console'   },
           { value: 'netmonitor', label: 'Network'   },
@@ -955,7 +955,7 @@
       panelSelectRow.style.paddingLeft = '28px';
       const panelSelect = panelSelectRow.querySelector('select');
       const syncPanelRow = () => {
-        const on = Services.prefs.getBoolPref('zen.urlbar.dev-indicator.auto-open-devtools', false);
+        const on = Services.prefs.getBoolPref('devbar.auto-open-devtools', false);
         panelSelectRow.style.opacity = on ? '1' : '0.4';
         panelSelect.disabled = !on;
       };
@@ -990,7 +990,7 @@
                   win.gURLBar.value = url;
                   win.gURLBar.handleCommand();
                 } catch (e2) {
-                  console.error('[zen-dev-url] private win: all nav methods failed:', e2.message);
+                  console.error('[devbar] private win: all nav methods failed:', e2.message);
                 }
               }
             }, 0);
@@ -1005,7 +1005,7 @@
           const url = gBrowser.currentURI.spec;
           navigator.clipboard.writeText(`curl '${url.replace(/'/g, `'\\''`)}'`)
             .then(() => this._showToast('Copied curl !'))
-            .catch(err => console.error('[zen-dev-url] clipboard write failed:', err));
+            .catch(err => console.error('[devbar] clipboard write failed:', err));
         }],
       ];
       for (const [label, iconUrl, onClick] of ACTIONS) {
@@ -1021,7 +1021,7 @@
      * the gear button.
      */
     _repositionPanel() {
-      const gear = document.getElementById('zen-dev-url-settings');
+      const gear = document.getElementById('devbar-settings');
       if (!gear || !this._settingsPanel) return;
       const rect = gear.getBoundingClientRect();
       this._settingsPanel.style.top = (rect.bottom + 4) + 'px';
@@ -1063,7 +1063,7 @@
         // For all other targets, use composedPath() rather than contains() —
         // the select element itself has anonymous XUL chrome content that
         // contains() misses but composedPath() correctly includes.
-        const gear = document.getElementById('zen-dev-url-settings');
+        const gear = document.getElementById('devbar-settings');
         const panel = this._settingsPanel;
         if (e.composedPath().some(el => el === panel || el === gear)) return;
         this._closeSettings();
@@ -1106,16 +1106,16 @@
     },
   };
 
-  window.__zenDevUrlDetector = detector;
+  window.__devbar = detector;
 
   // ── Self-tests ────────────────────────────────────────────────────────────
   // Off by default to keep the user's console quiet.
-  // Contributors: flip zen.urlbar.dev-indicator.self-tests = true in about:config.
+  // Contributors: flip devbar.self-tests = true in about:config.
   // Defined as a function (not IIFE) so we can run it AFTER init() creates the
   // banner + URL field. Some assertions check DOM elements that don't exist
   // until init() finishes.
   const runSelfTests = () => {
-    if (!Services.prefs.getBoolPref('zen.urlbar.dev-indicator.self-tests', false)) return;
+    if (!Services.prefs.getBoolPref('devbar.self-tests', false)) return;
     (function runSelfTestsInner() {
     let pass = 0, fail = 0;
 
@@ -1124,7 +1124,7 @@
         pass++;
       } else {
         fail++;
-        console.error(`[zen-dev-url] FAIL: ${description}\n  expected: ${expected}\n  got:      ${actual}`);
+        console.error(`[devbar] FAIL: ${description}\n  expected: ${expected}\n  got:      ${actual}`);
       }
     }
 
@@ -1152,13 +1152,13 @@
     const storageFlag = ciCD?.CLEAR_DOM_STORAGES;
     if (cookieFlag === undefined || storageFlag === undefined) {
       fail++;
-      console.error('[zen-dev-url] FAIL: CLEAR_COOKIES or CLEAR_DOM_STORAGES is undefined — clear site data broken');
+      console.error('[devbar] FAIL: CLEAR_COOKIES or CLEAR_DOM_STORAGES is undefined — clear site data broken');
     } else {
       pass++;
     }
     const cacheFlag = ciCD?.CLEAR_ALL_CACHES ?? ciCD?.CLEAR_CACHE ?? ciCD?.CLEAR_NETWORK_CACHE;
     if (cacheFlag === undefined) {
-      console.warn('[zen-dev-url] WARN: no cache clear constant found — cache will not be cleared on site data clear');
+      console.warn('[devbar] WARN: no cache clear constant found — cache will not be cleared on site data clear');
     }
 
     // Custom port matching
@@ -1180,8 +1180,8 @@
     // Banner URL field — should be a real <input> (v20260418-4+) so the cursor,
     // text selection, and keyboard interaction all live locally. The gURLBar
     // bridge runs on top of this: each keystroke syncs value + triggers search.
-    const banner = document.getElementById('zen-dev-url-banner');
-    const urlField = document.getElementById('zen-dev-url-field');
+    const banner = document.getElementById('devbar-banner');
+    const urlField = document.getElementById('devbar-field');
     assert('banner exists',              !!banner,                                true);
     assert('URL field exists',           !!urlField,                              true);
     // Element created via createElementNS(XHTML, 'input'), so tagName is
@@ -1207,8 +1207,8 @@
 
     const total = pass + fail;
     const status = fail === 0
-      ? `%c[zen-dev-url] self-tests: ${pass}/${total} passed`
-      : `%c[zen-dev-url] self-tests: ${fail} FAILED, ${pass}/${total} passed`;
+      ? `%c[devbar] self-tests: ${pass}/${total} passed`
+      : `%c[devbar] self-tests: ${fail} FAILED, ${pass}/${total} passed`;
     const style = fail === 0 ? 'color:#90ee90;font-weight:bold' : 'color:#ff4444;font-weight:bold';
     console.log(status, style);
     })();

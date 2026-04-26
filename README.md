@@ -1,9 +1,9 @@
-# zen-dev-url
+# devbar
 
 > A developer-mode mod for [Zen Browser](https://zen-browser.app) — construction-stripe banner, URL controls, and DevTools shortcuts that activate automatically on local dev URLs.
 
 <!-- MEDIA: hero screenshot or GIF of the banner in action -->
-<!-- ![zen-dev-url banner demo](docs/media/banner-demo.gif) -->
+<!-- ![devbar banner demo](docs/media/banner-demo.gif) -->
 
 ---
 
@@ -11,7 +11,7 @@
 
 <!-- MEDIA: side-by-side screenshot — normal vs dev URL -->
 <!-- ![Before and after](docs/media/before-after.png) -->
-### Dev URL Banner
+### Devbar
 <img width="1202" height="146" alt="SCR-20260420-oxbw" src="https://github.com/user-attachments/assets/34334967-66e7-45ea-823a-95336bf039f8" />
 
 ### Tab Bar with Construction Stripes
@@ -21,7 +21,7 @@
 <img width="301" height="790" alt="SCR-20260420-oxia" src="https://github.com/user-attachments/assets/3ddac77f-4e33-462b-9ad6-13ef4a39ec74" />
 
 
-When you navigate to a local dev URL, zen-dev-url:
+When you navigate to a local dev URL, devbar:
 
 - Slides in a **construction-stripe banner** above the page
 - Highlights the sidebar URL bar with an **orange outline**
@@ -232,11 +232,11 @@ Then **fully quit and reopen Zen** (File → Quit, not just close window).
 
 ### Manual
 
-1. **Userscript** — copy `zen-dev-url-detector.uc.js` into your profile's `chrome/JS/` folder:
+1. **Userscript** — copy `devbar.uc.js` into your profile's `chrome/JS/` folder:
    - macOS: `~/Library/Application Support/Zen/Profiles/<profile>/chrome/JS/`
    - Windows: `%APPDATA%\zen\<profile>\chrome\JS\`
 
-2. **CSS** — append the contents of `zen-dev-url.css` to your `chrome/userChrome.css`
+2. **CSS** — append the contents of `devbar.css` to your `chrome/userChrome.css`
 
 3. **Enable userChrome** — in `about:config`, set `toolkit.legacyUserProfileCustomizations.stylesheets` to `true`
 
@@ -249,7 +249,7 @@ Then **fully quit and reopen Zen** (File → Quit, not just close window).
 Open the browser console (`Cmd+Option+J` on Mac, `Ctrl+Shift+J` on Windows) after restart. You should see:
 
 ```
-[zen-dev-url] vYYYYMMDD-N loaded   ← styled in orange
+[devbar] vYYYYMMDD-N loaded   ← styled in orange
 ```
 
 Then navigate to `http://localhost` — the banner should appear.
@@ -285,7 +285,7 @@ Both `install.sh` and `install.ps1` accept the following flags:
 | Flag | PowerShell | What it does |
 |---|---|---|
 | `--help` | `-Help` | Show usage and exit |
-| `--uninstall` | `-Uninstall` | Remove zen-dev-url files from all profiles |
+| `--uninstall` | `-Uninstall` | Remove devbar files from all profiles |
 | `--verify` | `-Verify` | Check that the install is healthy |
 | `--dry-run` | `-DryRun` | Show what would be done, change nothing |
 
@@ -293,7 +293,7 @@ Both `install.sh` and `install.ps1` accept the following flags:
 # Check if everything is installed correctly
 bash install.sh --verify
 
-# Remove zen-dev-url (leaves fx-autoconfig in place)
+# Remove devbar (leaves fx-autoconfig in place)
 bash install.sh --uninstall
 
 # Preview what the installer will do
@@ -339,21 +339,21 @@ Add a workflow to run `install.sh` on a real Linux runner automatically on every
 
 ## about:config prefs
 
-All preferences are under `zen.urlbar.*`. You can tweak them directly in `about:config` or through the gear panel.
+All preferences are under `devbar.*`. You can tweak them directly in `about:config` or through the gear panel.
 
-**zen-dev-url prefs** (created by this mod):
+**devbar prefs** (created by this mod):
 
 | Preference | Default | Description |
 |---|---|---|
-| `zen.urlbar.show-dev-indicator` | `true` | Master on/off switch |
-| `zen.urlbar.dev-indicator.include-zero-host` | `true` | Match `0.0.0.0` |
-| `zen.urlbar.dev-indicator.include-local-tlds` | `true` | Match `.local` / `.test` / `.localhost` / `.internal` |
-| `zen.urlbar.dev-indicator.include-file-urls` | `false` | Match `file://` URLs |
-| `zen.urlbar.dev-indicator.custom-ports` | `""` | Comma-separated port list |
-| `zen.urlbar.dev-indicator.custom-patterns` | `""` | Comma-separated glob host patterns |
-| `zen.urlbar.dev-indicator.auto-open-devtools` | `false` | Auto-open DevTools on every dev URL navigation |
-| `zen.urlbar.dev-indicator.auto-open-panel` | `"webconsole"` | Which panel auto-open uses (`webconsole` / `netmonitor` / `inspector`) |
-| `zen.urlbar.dev-indicator.self-tests` | `false` | Run logic self-tests on window open and print results to the console (for contributors) |
+| `devbar.enabled` | `true` | Master on/off switch |
+| `devbar.include-zero-host` | `true` | Match `0.0.0.0` |
+| `devbar.include-local-tlds` | `true` | Match `.local` / `.test` / `.localhost` / `.internal` |
+| `devbar.include-file-urls` | `false` | Match `file://` URLs |
+| `devbar.custom-ports` | `""` | Comma-separated port list |
+| `devbar.custom-patterns` | `""` | Comma-separated glob host patterns |
+| `devbar.auto-open-devtools` | `false` | Auto-open DevTools on every dev URL navigation |
+| `devbar.auto-open-panel` | `"webconsole"` | Which panel auto-open uses (`webconsole` / `netmonitor` / `inspector`) |
+| `devbar.self-tests` | `false` | Run logic self-tests on window open and print results to the console (for contributors) |
 
 **Firefox prefs** (not owned by this mod — the settings panel just toggles them so your changes survive restart):
 
@@ -367,12 +367,12 @@ All preferences are under `zen.urlbar.*`. You can tweak them directly in `about:
 
 ## How it works
 
-zen-dev-url is a [fx-autoconfig](https://github.com/MrOtherGuy/fx-autoconfig) userscript (`zen-dev-url-detector.uc.js`) that runs in the browser chrome context. It:
+devbar is a [fx-autoconfig](https://github.com/MrOtherGuy/fx-autoconfig) userscript (`devbar.uc.js`) that runs in the browser chrome context. It:
 
 1. Listens to tab and navigation events via `gBrowser`
 2. Checks the current URI against dev host/port/pattern rules
-3. Sets a `zen-dev-url` attribute on `document.documentElement`
-4. CSS in `userChrome.css` keyed on `:root[zen-dev-url]` activates all the visual changes
+3. Sets a `devbar` attribute on `document.documentElement`
+4. CSS in `userChrome.css` keyed on `:root[devbar]` activates all the visual changes
 
 No native code, no extensions API, no remote requests.
 
