@@ -268,18 +268,26 @@ if [[ "$MODE" == "uninstall" ]]; then
     [[ ! -d "$PROFILE_DIR" ]] && continue
     [[ ${#PROFILE_DIRS[@]} -gt 1 ]] && info "─── $(basename "$PROFILE_DIR") ───"
 
-    # Remove userscript
+    # Remove userscript (check both new and old filenames)
     _js="$PROFILE_DIR/chrome/JS/devbar.uc.js"
-    if [[ -f "$_js" ]]; then
-      rm "$_js"
+    _old_js="$PROFILE_DIR/chrome/JS/zen-dev-url-detector.uc.js"
+    if [[ -f "$_js" ]] || [[ -f "$_old_js" ]]; then
+      rm -f "$_js" "$_old_js"
       success "Removed userscript"
     else
       warn "Userscript not found, skipping"
     fi
 
-    # Strip CSS block (from marker to EOF)
+    # Strip CSS block (from marker to EOF — check both new and old markers)
     _css="$PROFILE_DIR/chrome/userChrome.css"
     _marker="/* devbar */"
+    _old_marker="/* zen-dev-url */"
+    # Strip old marker first if present
+    if [[ -f "$_css" ]] && grep -qF "$_old_marker" "$_css"; then
+      _line=$(grep -nF "$_old_marker" "$_css" | head -1 | cut -d: -f1)
+      head -n $((_line - 1)) "$_css" > "$_css.tmp" && mv "$_css.tmp" "$_css"
+      success "Removed old zen-dev-url styles from userChrome.css"
+    fi
     if [[ -f "$_css" ]] && grep -qF "$_marker" "$_css"; then
       # Portable: truncate file at the marker line
       _line=$(grep -nF "$_marker" "$_css" | head -1 | cut -d: -f1)
@@ -438,6 +446,12 @@ for PROFILE_DIR in "${PROFILE_DIRS[@]}"; do
   # Userscript
   JS_DIR="$PROFILE_DIR/chrome/JS"
   mkdir -p "$JS_DIR"
+  # Migration: remove old zen-dev-url-detector.uc.js if present
+  _old_js="$JS_DIR/zen-dev-url-detector.uc.js"
+  if [[ -f "$_old_js" ]]; then
+    rm "$_old_js"
+    info "Removed old zen-dev-url-detector.uc.js (renamed to devbar.uc.js)"
+  fi
   cp "$SCRIPT_DIR/devbar.uc.js" "$JS_DIR/"
   success "Copied userscript to $JS_DIR"
 
@@ -447,6 +461,13 @@ for PROFILE_DIR in "${PROFILE_DIRS[@]}"; do
   # this, users who installed once and then `git pull`'d would get JS
   # updates but frozen CSS.
   CHROME_CSS="$PROFILE_DIR/chrome/userChrome.css"
+  # Migration: strip old /* zen-dev-url */ CSS block if present
+  _old_marker="/* zen-dev-url */"
+  if grep -qF "$_old_marker" "$CHROME_CSS" 2>/dev/null; then
+    _line=$(grep -nF "$_old_marker" "$CHROME_CSS" | head -1 | cut -d: -f1)
+    head -n $((_line - 1)) "$CHROME_CSS" > "$CHROME_CSS.tmp" && mv "$CHROME_CSS.tmp" "$CHROME_CSS"
+    info "Stripped old zen-dev-url styles (renamed to devbar)"
+  fi
   MARKER="/* devbar */"
   if grep -qF "$MARKER" "$CHROME_CSS" 2>/dev/null; then
     _line=$(grep -nF "$MARKER" "$CHROME_CSS" | head -1 | cut -d: -f1)
