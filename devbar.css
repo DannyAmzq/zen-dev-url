@@ -1,5 +1,5 @@
 /* ============================================================
-   zen-dev-url — Dev URL indicator for Zen Browser
+   devbar — Dev URL indicator for Zen Browser
    Add the contents of this file to your userChrome.css
    ============================================================ */
 
@@ -9,12 +9,12 @@
 }
 
 /* Sidebar URL bar gets an orange outline on dev URLs */
-:root[zen-dev-url] #urlbar .urlbar-background {
+:root[devbar] #urlbar .urlbar-background {
     outline: 1.5px solid #ff6b35 !important;
     outline-offset: -1.5px;
 }
 
-:root[zen-dev-url] #urlbar:not([breakout-extend="true"]) .urlbar-background {
+:root[devbar] #urlbar:not([breakout-extend="true"]) .urlbar-background {
     background-color: color-mix(
         in srgb,
         #ff6b35 8%,
@@ -23,12 +23,12 @@
 }
 
 /* Active tab in sidebar gets a construction stripe border on dev URLs */
-:root[zen-dev-url] .tabbrowser-tab[selected] .tab-background {
+:root[devbar] .tabbrowser-tab[selected] .tab-background {
     position: relative !important;
     overflow: visible !important;
 }
 
-:root[zen-dev-url] .tabbrowser-tab[selected] .tab-background::after {
+:root[devbar] .tabbrowser-tab[selected] .tab-background::after {
     content: '';
     pointer-events: none;
     position: absolute;
@@ -51,7 +51,7 @@
 }
 
 /* Dev banner shown above the page content */
-#zen-dev-url-banner {
+#devbar-banner {
     display: flex;
     visibility: hidden;
     pointer-events: none;
@@ -80,35 +80,35 @@
     transition: opacity 0.15s ease, visibility 0.15s ease;
 }
 
-:root[zen-dev-url] #zen-dev-url-banner {
+:root[devbar] #devbar-banner {
     visibility: visible;
     pointer-events: auto;
     opacity: 1;
 }
 
 /* Push the page content down so the banner doesn't overlap it */
-:root[zen-dev-url] #tabbrowser-tabpanels > .browserSidebarContainer {
+:root[devbar] #tabbrowser-tabpanels > .browserSidebarContainer {
     padding-top: 44px !important;
     background-color: rgba(50, 22, 10, 0.82) !important;
 }
 
 /* Push Zen chrome elements below the dev banner */
-:root[zen-dev-url] #zen-toast-container {
+:root[devbar] #zen-toast-container {
     top: 52px !important;
 }
 
-:root[zen-dev-url] .screenshotsPagePanel {
+:root[devbar] .screenshotsPagePanel {
     margin-top: 44px !important;
 }
 
-:root[zen-dev-url] #zen-splitview-overlay-wrapper,
-:root[zen-dev-url] #fullscreen-warning,
-:root[zen-dev-url] #pointerlock-warning,
-:root[zen-dev-url] #fullscr-toggler {
+:root[devbar] #zen-splitview-overlay-wrapper,
+:root[devbar] #fullscreen-warning,
+:root[devbar] #pointerlock-warning,
+:root[devbar] #fullscr-toggler {
     margin-top: 44px !important;
 }
 
-#zen-dev-url-banner:hover {
+#devbar-banner:hover {
     background:
         repeating-linear-gradient(
             -45deg,
@@ -124,7 +124,7 @@
    `flex: 1 1 0%` grows from zero to fill leftover banner space. `overflow:
    hidden` prevents the child field from pushing the wrapper past its flex
    allocation when the URL text is very long. */
-#zen-dev-url-field-wrapper {
+#devbar-field-wrapper {
     flex: 1 1 0% !important;
     min-width: 0 !important;
     overflow: hidden !important;
@@ -135,7 +135,7 @@
 /* URL field — real <input> that the user types into directly. The cursor,
    text selection, and keyboard interaction all live here. Values are synced
    to gURLBar in the background to trigger native autocomplete. */
-#zen-dev-url-field {
+#devbar-field {
     appearance: none !important;
     -moz-appearance: none !important;
     flex: 1 1 0% !important;
@@ -160,23 +160,23 @@
     caret-color: #ff6b35;
 }
 
-#zen-dev-url-field::placeholder {
+#devbar-field::placeholder {
     color: rgba(255, 255, 255, 0.35);
     opacity: 1;
 }
 
-#zen-dev-url-field:hover {
+#devbar-field:hover {
     background: rgba(0, 0, 0, 0.42) !important;
 }
 
 /* Active: input is focused — user is typing. Orange outline, darker bg. */
-#zen-dev-url-field[data-active] {
+#devbar-field[data-active] {
     cursor: text;
     outline: 2px solid #ff6b35 !important;
     background: rgba(0, 0, 0, 0.55) !important;
 }
 
-.zen-dev-url-btn {
+.devbar-btn {
     /* Firefox chrome applies -moz-appearance: button to HTML <button>s,
        which on macOS renders a translucent native button and IGNORES
        background-color. Force none so our dark fill actually paints. */
@@ -195,7 +195,7 @@
     position: relative;
 }
 
-.zen-dev-url-btn::before {
+.devbar-btn::before {
     content: '';
     display: block;
     position: absolute;
@@ -209,21 +209,21 @@
     mask-position: center;
 }
 
-.zen-dev-url-btn:hover {
+.devbar-btn:hover {
     background-color: rgba(255, 107, 53, 0.7) !important;
     background-image: none !important;
     border-color: rgba(255, 255, 255, 0.55);
 }
 
-.zen-dev-url-btn:active {
+.devbar-btn:active {
     transform: scale(0.88);
 }
 
-.zen-dev-url-btn:hover::before {
+.devbar-btn:hover::before {
     background-color: #ffffff;
 }
 
-.zen-dev-url-separator {
+.devbar-separator {
     flex-shrink: 0;
     width: 1.5px;
     height: 22px;
@@ -232,42 +232,42 @@
     border-radius: 1px;
 }
 
-#zen-dev-url-copy-link::before {
+#devbar-copy-link::before {
     mask-image: url('chrome://global/skin/icons/edit-copy.svg');
 }
 
-#zen-dev-url-copy-link[data-copied]::before {
+#devbar-copy-link[data-copied]::before {
     mask-image: url('chrome://global/skin/icons/check.svg');
     background-color: #90ee90;
 }
 
-#zen-dev-url-clear-refresh::before {
+#devbar-clear-refresh::before {
     mask-image: url('chrome://global/skin/icons/reload.svg');
 }
 
-#zen-dev-url-screenshot::before {
+#devbar-screenshot::before {
     mask-image: url('chrome://devtools/skin/images/command-screenshot.svg');
 }
 
-#zen-dev-url-inspector::before {
+#devbar-inspector::before {
     mask-image: url('chrome://devtools/skin/images/tool-inspector.svg');
 }
 
-#zen-dev-url-console::before {
+#devbar-console::before {
     mask-image: url('chrome://devtools/skin/images/tool-webconsole.svg');
 }
 
-#zen-dev-url-network::before {
+#devbar-network::before {
     mask-image: url('chrome://devtools/skin/images/tool-network.svg');
 }
 
 /* Gear / settings button icon */
-#zen-dev-url-settings::before {
+#devbar-settings::before {
     mask-image: url('chrome://global/skin/icons/settings.svg');
 }
 
 /* Settings panel */
-#zen-dev-url-settings-panel {
+#devbar-settings-panel {
     display: none;
     position: fixed;
     z-index: 10000;
@@ -287,7 +287,7 @@
 }
 
 /* Toggle rows */
-.zen-dev-url-toggle-row {
+.devbar-toggle-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -295,27 +295,27 @@
     gap: 16px;
     user-select: none;
 }
-.zen-dev-url-toggle-row:hover {
+.devbar-toggle-row:hover {
     background: rgba(255, 107, 53, 0.15);
 }
-.zen-dev-url-toggle-row > span {
+.devbar-toggle-row > span {
     flex: 1;
     color: rgba(255, 255, 255, 0.85);
 }
 
 /* Toggle switch */
-.zen-dev-url-toggle {
+.devbar-toggle {
     display: flex;
     align-items: center;
 }
-.zen-dev-url-toggle input[type="checkbox"] {
+.devbar-toggle input[type="checkbox"] {
     position: absolute;
     opacity: 0;
     width: 0;
     height: 0;
     pointer-events: none;
 }
-.zen-dev-url-toggle-track {
+.devbar-toggle-track {
     display: inline-block;
     position: relative;
     width: 32px;
@@ -326,7 +326,7 @@
     cursor: pointer;
     transition: background 0.15s ease;
 }
-.zen-dev-url-toggle-track::after {
+.devbar-toggle-track::after {
     content: '';
     position: absolute;
     top: 2px;
@@ -337,17 +337,17 @@
     background: rgba(255, 255, 255, 0.6);
     transition: transform 0.15s ease, background 0.15s ease;
 }
-.zen-dev-url-toggle input:checked + .zen-dev-url-toggle-track {
+.devbar-toggle input:checked + .devbar-toggle-track {
     background: #ff6b35;
     border-color: #ff6b35;
 }
-.zen-dev-url-toggle input:checked + .zen-dev-url-toggle-track::after {
+.devbar-toggle input:checked + .devbar-toggle-track::after {
     transform: translateX(14px);
     background: #fff;
 }
 
 /* Dev mode toast notification */
-#zen-dev-url-toast {
+#devbar-toast {
     position: fixed;
     bottom: 24px;
     left: 50%;
@@ -364,12 +364,12 @@
     opacity: 0;
     transition: opacity 0.15s ease;
 }
-#zen-dev-url-toast[data-visible] {
+#devbar-toast[data-visible] {
     opacity: 1;
 }
 
 /* Viewport size readout in banner */
-#zen-dev-url-viewport {
+#devbar-viewport {
     flex-shrink: 0;
     font-size: 11px;
     font-family: monospace;
@@ -381,7 +381,7 @@
 }
 
 /* Settings panel section headers */
-.zen-dev-url-section-header {
+.devbar-section-header {
     font-size: 10px;
     font-weight: bold;
     letter-spacing: 0.08em;
@@ -392,27 +392,27 @@
 }
 
 /* Thin divider between settings sections */
-.zen-dev-url-panel-divider {
+.devbar-panel-divider {
     height: 1px;
     background: rgba(255, 255, 255, 0.1);
     margin: 6px 0;
 }
 
 /* Text input rows for custom ports / patterns */
-.zen-dev-url-text-row {
+.devbar-text-row {
     display: flex;
     flex-direction: column;
     padding: 3px 14px 8px;
     gap: 5px;
 }
 
-.zen-dev-url-text-row > span {
+.devbar-text-row > span {
     color: rgba(255, 255, 255, 0.65);
     font-size: 11px;
     user-select: none;
 }
 
-.zen-dev-url-text-input {
+.devbar-text-input {
     appearance: none !important;
     -moz-appearance: none !important;
     background: rgba(0, 0, 0, 0.4) !important;
@@ -429,31 +429,31 @@
     transition: border-color 0.12s ease;
 }
 
-.zen-dev-url-text-input:focus {
+.devbar-text-input:focus {
     border-color: rgba(255, 107, 53, 0.75) !important;
 }
 
-.zen-dev-url-text-input::placeholder {
+.devbar-text-input::placeholder {
     color: rgba(255, 255, 255, 0.28);
     opacity: 1;
 }
 
 /* Clear site data button — shows a check on success */
-#zen-dev-url-clear-data::before {
+#devbar-clear-data::before {
     mask-image: url('chrome://global/skin/icons/delete.svg');
 }
 
-#zen-dev-url-clear-data[data-done]::before {
+#devbar-clear-data[data-done]::before {
     mask-image: url('chrome://global/skin/icons/check.svg');
     background-color: #90ee90;
 }
 
 /* Settings panel — action button rows */
-.zen-dev-url-action-row {
+.devbar-action-row {
     padding: 4px 14px 6px;
 }
 
-.zen-dev-url-action-btn {
+.devbar-action-btn {
     appearance: none !important;
     -moz-appearance: none !important;
     width: 100%;
@@ -470,23 +470,23 @@
     transition: background 0.12s ease;
 }
 
-.zen-dev-url-action-btn {
+.devbar-action-btn {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
-.zen-dev-url-action-btn:hover {
+.devbar-action-btn:hover {
     background: rgba(255, 107, 53, 0.32) !important;
 }
 
-.zen-dev-url-action-btn:active {
+.devbar-action-btn:active {
     transform: scale(0.98);
 }
 
 /* Icon rendered via mask-image (inline style on the span) so the SVG
    inherits our orange tint instead of shipping its own colors. */
-.zen-dev-url-action-icon {
+.devbar-action-icon {
     flex-shrink: 0;
     width: 14px;
     height: 14px;
@@ -499,17 +499,17 @@
     -webkit-mask-position: center;
 }
 
-.zen-dev-url-action-btn:hover .zen-dev-url-action-icon {
+.devbar-action-btn:hover .devbar-action-icon {
     background-color: #ffffff;
 }
 
-.zen-dev-url-action-label {
+.devbar-action-label {
     flex: 1;
     text-align: left;
 }
 
 /* DevTools panel select dropdown in settings */
-.zen-dev-url-select {
+.devbar-select {
     appearance: none !important;
     -moz-appearance: none !important;
     background: rgba(0, 0, 0, 0.4) !important;
@@ -524,6 +524,6 @@
     outline: none !important;
 }
 
-.zen-dev-url-select:focus {
+.devbar-select:focus {
     border-color: rgba(255, 107, 53, 0.75) !important;
 }
