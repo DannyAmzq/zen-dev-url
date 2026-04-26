@@ -184,17 +184,31 @@ if ($Mode -eq "uninstall") {
   foreach ($ProfileDir in $ProfileDirs) {
     if ($ProfileDirs.Count -gt 1) { Info "─── $(Split-Path -Leaf $ProfileDir) ───" }
 
-    # Remove userscript
+    # Remove userscript (check both new and old filenames)
     $js = Join-Path $ProfileDir "chrome\JS\devbar.uc.js"
-    if (Test-Path $js) {
-      Remove-Item $js -Force
+    $OldJs = Join-Path $ProfileDir "chrome\JS\zen-dev-url-detector.uc.js"
+    if ((Test-Path $js) -or (Test-Path $OldJs)) {
+      if (Test-Path $js) { Remove-Item $js -Force }
+      if (Test-Path $OldJs) { Remove-Item $OldJs -Force }
       Success "Removed userscript"
     } else {
       Warn "Userscript not found, skipping"
     }
 
-    # Strip CSS block (from marker to EOF)
+    # Strip CSS block (from marker to EOF — check both new and old markers)
     $css = Join-Path $ProfileDir "chrome\userChrome.css"
+    # Strip old marker first if present
+    $OldMarker = "/* zen-dev-url */"
+    if ((Test-Path $css) -and (Get-Content $css -Raw) -match [regex]::Escape($OldMarker)) {
+      $lines = Get-Content $css
+      $idx = ($lines | Select-String -SimpleMatch $OldMarker | Select-Object -First 1).LineNumber - 1
+      if ($idx -gt 0) {
+        $lines[0..($idx - 1)] | Set-Content $css -Encoding UTF8
+      } else {
+        Set-Content $css "" -Encoding UTF8
+      }
+      Success "Removed old zen-dev-url styles from userChrome.css"
+    }
     $Marker = "/* devbar */"
     if ((Test-Path $css) -and (Get-Content $css -Raw) -match [regex]::Escape($Marker)) {
       $lines = Get-Content $css
@@ -296,6 +310,12 @@ foreach ($ProfileDir in $ProfileDirs) {
   # Userscript
   $JsDir = Join-Path $ProfileDir "chrome\JS"
   New-Item -ItemType Directory -Force -Path $JsDir | Out-Null
+  # Migration: remove old zen-dev-url-detector.uc.js if present
+  $OldJs = Join-Path $JsDir "zen-dev-url-detector.uc.js"
+  if (Test-Path $OldJs) {
+    Remove-Item $OldJs -Force
+    Info "Removed old zen-dev-url-detector.uc.js (renamed to devbar.uc.js)"
+  }
   Copy-Item "$ScriptDir\devbar.uc.js" $JsDir -Force
   Success "Copied userscript to $JsDir"
 
@@ -303,6 +323,18 @@ foreach ($ProfileDir in $ProfileDirs) {
   # strip everything from the marker to EOF and re-append, so re-running
   # install.ps1 picks up CSS changes (icons, stripe colors, etc).
   $ChromeCss = Join-Path $ProfileDir "chrome\userChrome.css"
+  # Migration: strip old /* zen-dev-url */ CSS block if present
+  $OldMarker = "/* zen-dev-url */"
+  if ((Test-Path $ChromeCss) -and (Get-Content $ChromeCss -Raw) -match [regex]::Escape($OldMarker)) {
+    $lines = Get-Content $ChromeCss
+    $idx = ($lines | Select-String -SimpleMatch $OldMarker | Select-Object -First 1).LineNumber - 1
+    if ($idx -gt 0) {
+      $lines[0..($idx - 1)] | Set-Content $ChromeCss -Encoding UTF8
+    } else {
+      Set-Content $ChromeCss "" -Encoding UTF8
+    }
+    Info "Stripped old zen-dev-url styles (renamed to devbar)"
+  }
   $Marker    = "/* devbar */"
   if ((Test-Path $ChromeCss) -and (Get-Content $ChromeCss -Raw) -match [regex]::Escape($Marker)) {
     $lines = Get-Content $ChromeCss
