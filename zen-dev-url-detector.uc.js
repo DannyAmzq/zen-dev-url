@@ -131,7 +131,7 @@
       // Works on any URL — forced-on overrides URL checks, forced-off suppresses
       // the banner even on dev URLs. mozSystemGroup: true fires before web content.
       window.addEventListener('keydown', (e) => {
-        if (e.altKey && e.shiftKey && e.key === 'D') {
+        if (e.altKey && e.shiftKey && e.code === 'KeyD') {
           // Respect the master off switch BEFORE eating the event — otherwise
           // a disabled mod still swallows the user's Alt+Shift+D.
           if (!this._prefs.enabled) return;
@@ -153,6 +153,35 @@
           this._update();
         }
       }, { capture: true, mozSystemGroup: true });
+
+      // Tab context menu item — "Toggle Dev Banner"
+      const tabMenu = document.getElementById('tabContextMenu');
+      if (tabMenu) {
+        const menuItem = document.createXULElement('menuitem');
+        menuItem.id = 'zen-dev-url-context-toggle';
+        menuItem.setAttribute('label', 'Toggle Dev Banner');
+        menuItem.addEventListener('command', () => {
+          const browser = gBrowser.selectedBrowser;
+          const forced = this._forcedBrowsers.has(browser);
+          const excluded = this._excludedBrowsers.has(browser);
+          const currentlyShowing = (this._isDevUri(gBrowser.currentURI) && !excluded) || forced;
+          if (currentlyShowing) {
+            this._forcedBrowsers.delete(browser);
+            this._excludedBrowsers.add(browser);
+            this._showToast('Dev banner off !');
+          } else {
+            this._excludedBrowsers.delete(browser);
+            this._forcedBrowsers.add(browser);
+            this._showToast('Dev banner on !');
+          }
+          this._update();
+        });
+        const sep = document.createXULElement('menuseparator');
+        sep.id = 'zen-dev-url-context-sep';
+        tabMenu.appendChild(sep);
+        tabMenu.appendChild(menuItem);
+      }
+
       this._update();
     },
 
@@ -382,6 +411,7 @@
         btn.id = id;
         btn.className = 'zen-dev-url-btn';
         btn.title = title;
+        btn.addEventListener('mousedown', (e) => e.preventDefault());
         btn.addEventListener('click', action);
         return btn;
       };
