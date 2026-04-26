@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ============================================================
-# zen-dev-url installer — Mac & Linux
+# devbar installer — Mac & Linux
 # ============================================================
 # NOTE: Any existing userChrome.css content is preserved.
-#       This script appends zen-dev-url styles rather than
+#       This script appends devbar styles rather than
 #       overwriting, and is safe to re-run (idempotent).
 # ============================================================
 
@@ -15,10 +15,10 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-info()    { echo -e "${BLUE}[zen-dev-url]${NC} $1"; }
-success() { echo -e "${GREEN}[zen-dev-url]${NC} $1"; }
-warn()    { echo -e "${YELLOW}[zen-dev-url]${NC} $1"; }
-error()   { echo -e "${RED}[zen-dev-url]${NC} $1"; exit 1; }
+info()    { echo -e "${BLUE}[devbar]${NC} $1"; }
+success() { echo -e "${GREEN}[devbar]${NC} $1"; }
+warn()    { echo -e "${YELLOW}[devbar]${NC} $1"; }
+error()   { echo -e "${RED}[devbar]${NC} $1"; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -28,17 +28,17 @@ MODE="install"
 
 show_help() {
   cat <<'HELP'
-zen-dev-url installer — Mac, Linux, and WSL
+devbar installer — Mac, Linux, and WSL
 
 Usage: bash install.sh [OPTIONS]
 
 Options:
   -h, --help        Show this help message and exit
-      --uninstall   Remove zen-dev-url files from all detected profiles
-      --verify      Check whether zen-dev-url is correctly installed
+      --uninstall   Remove devbar files from all detected profiles
+      --verify      Check whether devbar is correctly installed
       --dry-run     Show what would be done without making changes
 
-Without options, installs zen-dev-url to all detected Zen profiles.
+Without options, installs devbar to all detected Zen profiles.
 HELP
   exit 0
 }
@@ -53,9 +53,9 @@ for arg in "$@"; do
   esac
 done
 
-VERSION=$(sed -n "s/.*ZEN_DEV_URL_VERSION *= *'\([^']*\)'.*/\1/p" "$SCRIPT_DIR/zen-dev-url-detector.uc.js" 2>/dev/null)
+VERSION=$(sed -n "s/.*DEVBAR_VERSION *= *'\([^']*\)'.*/\1/p" "$SCRIPT_DIR/devbar.uc.js" 2>/dev/null)
 [[ -z "$VERSION" ]] && VERSION="unknown"
-info "zen-dev-url v$VERSION — $MODE"
+info "devbar v$VERSION — $MODE"
 
 # ── 1. Detect OS and Zen paths ───────────────────────────────
 
@@ -226,13 +226,13 @@ if [[ "$MODE" == "verify" ]]; then
     [[ ! -d "$PROFILE_DIR" ]] && continue
     [[ ${#PROFILE_DIRS[@]} -gt 1 ]] && info "─── $(basename "$PROFILE_DIR") ───"
 
-    if [[ -f "$PROFILE_DIR/chrome/JS/zen-dev-url-detector.uc.js" ]]; then
+    if [[ -f "$PROFILE_DIR/chrome/JS/devbar.uc.js" ]]; then
       success "✔ Userscript installed"; PASS=$((PASS + 1))
     else
       warn "✘ Userscript MISSING at $PROFILE_DIR/chrome/JS/"; FAIL=$((FAIL + 1))
     fi
 
-    if grep -qF "/* zen-dev-url */" "$PROFILE_DIR/chrome/userChrome.css" 2>/dev/null; then
+    if grep -qF "/* devbar */" "$PROFILE_DIR/chrome/userChrome.css" 2>/dev/null; then
       success "✔ CSS styles present in userChrome.css"; PASS=$((PASS + 1))
     else
       warn "✘ CSS styles MISSING from userChrome.css"; FAIL=$((FAIL + 1))
@@ -269,7 +269,7 @@ if [[ "$MODE" == "uninstall" ]]; then
     [[ ${#PROFILE_DIRS[@]} -gt 1 ]] && info "─── $(basename "$PROFILE_DIR") ───"
 
     # Remove userscript
-    _js="$PROFILE_DIR/chrome/JS/zen-dev-url-detector.uc.js"
+    _js="$PROFILE_DIR/chrome/JS/devbar.uc.js"
     if [[ -f "$_js" ]]; then
       rm "$_js"
       success "Removed userscript"
@@ -279,14 +279,14 @@ if [[ "$MODE" == "uninstall" ]]; then
 
     # Strip CSS block (from marker to EOF)
     _css="$PROFILE_DIR/chrome/userChrome.css"
-    _marker="/* zen-dev-url */"
+    _marker="/* devbar */"
     if [[ -f "$_css" ]] && grep -qF "$_marker" "$_css"; then
       # Portable: truncate file at the marker line
       _line=$(grep -nF "$_marker" "$_css" | head -1 | cut -d: -f1)
       head -n $((_line - 1)) "$_css" > "$_css.tmp" && mv "$_css.tmp" "$_css"
-      success "Removed zen-dev-url styles from userChrome.css"
+      success "Removed devbar styles from userChrome.css"
     else
-      warn "No zen-dev-url styles found in userChrome.css, skipping"
+      warn "No devbar styles found in userChrome.css, skipping"
     fi
 
     REMOVED=$((REMOVED + 1))
@@ -323,11 +323,11 @@ if [[ "$MODE" == "dry-run" ]]; then
     [[ ! -d "$PROFILE_DIR" ]] && continue
     info "  Profile: $(basename "$PROFILE_DIR")"
     info "    • Copy fx-autoconfig utils → chrome/utils/"
-    info "    • Copy zen-dev-url-detector.uc.js → chrome/JS/"
-    if grep -qF "/* zen-dev-url */" "$PROFILE_DIR/chrome/userChrome.css" 2>/dev/null; then
+    info "    • Copy devbar.uc.js → chrome/JS/"
+    if grep -qF "/* devbar */" "$PROFILE_DIR/chrome/userChrome.css" 2>/dev/null; then
       info "    • CSS already present (skip)"
     else
-      info "    • Append zen-dev-url.css → userChrome.css"
+      info "    • Append devbar.css → userChrome.css"
     fi
   done
 
@@ -381,7 +381,7 @@ else
       fi
     }
 
-    _err_file=$(mktemp "${TMPDIR:-/tmp}/zen-dev-url-install-err.XXXXXX")
+    _err_file=$(mktemp "${TMPDIR:-/tmp}/devbar-install-err.XXXXXX")
     if ! _install_fx_files 2>"$_err_file"; then
       _err=$(cat "$_err_file" 2>/dev/null)
       rm -f "$_err_file"
@@ -438,22 +438,22 @@ for PROFILE_DIR in "${PROFILE_DIRS[@]}"; do
   # Userscript
   JS_DIR="$PROFILE_DIR/chrome/JS"
   mkdir -p "$JS_DIR"
-  cp "$SCRIPT_DIR/zen-dev-url-detector.uc.js" "$JS_DIR/"
+  cp "$SCRIPT_DIR/devbar.uc.js" "$JS_DIR/"
   success "Copied userscript to $JS_DIR"
 
-  # CSS — always refresh. If an existing zen-dev-url block is present,
+  # CSS — always refresh. If an existing devbar block is present,
   # strip everything from the marker to EOF and re-append, so re-running
   # install.sh picks up CSS changes (icons, stripe colors, etc). Without
   # this, users who installed once and then `git pull`'d would get JS
   # updates but frozen CSS.
   CHROME_CSS="$PROFILE_DIR/chrome/userChrome.css"
-  MARKER="/* zen-dev-url */"
+  MARKER="/* devbar */"
   if grep -qF "$MARKER" "$CHROME_CSS" 2>/dev/null; then
     _line=$(grep -nF "$MARKER" "$CHROME_CSS" | head -1 | cut -d: -f1)
     head -n $((_line - 1)) "$CHROME_CSS" > "$CHROME_CSS.tmp" && mv "$CHROME_CSS.tmp" "$CHROME_CSS"
-    info "Stripped existing zen-dev-url styles before re-appending."
+    info "Stripped existing devbar styles before re-appending."
   fi
-  { echo ""; echo "$MARKER"; cat "$SCRIPT_DIR/zen-dev-url.css"; } >> "$CHROME_CSS"
+  { echo ""; echo "$MARKER"; cat "$SCRIPT_DIR/devbar.css"; } >> "$CHROME_CSS"
   success "Appended styles to $CHROME_CSS"
 
   INSTALLED=$((INSTALLED + 1))
@@ -491,7 +491,7 @@ else
   echo -e "${YELLOW}│  3. Set it to: true                                 │${NC}"
   echo -e "${YELLOW}│  4. Restart Zen                                     │${NC}"
   echo -e "${YELLOW}│                                                     │${NC}"
-  echo -e "${YELLOW}│  The dev banner will appear on localhost URLs.      │${NC}"
+  echo -e "${YELLOW}│  Devbar will appear on localhost URLs.      │${NC}"
   echo -e "${YELLOW}└─────────────────────────────────────────────────────┘${NC}"
   if [[ ${#PROFILE_DIRS[@]} -gt 1 && $_pref_missing_count -lt ${#PROFILE_DIRS[@]} ]]; then
     warn "Needed in: ${_pref_missing_profiles[*]}"
