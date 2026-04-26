@@ -1,6 +1,5 @@
-# Claude Code (track CLAUDE.md but not internal state)
-.claude/*
-!.claude/CLAUDE.md
+# Internal config
+.claude/
 
 # macOS
 .DS_Store
