@@ -6,7 +6,6 @@
   "homepage": "https://github.com/DannyAmzq/zen-dev-url",
   "version": "1.2.0-beta.1",
   "fork": ["zen"],
-  "ai": "partial",
   "tags": ["development", "url", "toolbar"],
   "style": { "chrome": "devbar.css" },
   "scripts": {

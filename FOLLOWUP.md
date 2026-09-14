@@ -8,7 +8,7 @@ picking up later don't get lost.
 ### Feature work
 - [ ] **URL field opacity on Windows** (loose thread from #20). Not
   reproduced recently, re-check after Windows test round.
-- [ ] **Stale PRs to close:** #7 (Copilot audit PR, superseded by #19),
+- [ ] **Stale PRs to close:** #7 (installation audit PR, superseded by #19),
   #16 (duplicate targeting main), #17 and #18 (cloudyun888 — obsolete).
 
 ### Long-term research
@@ -67,12 +67,12 @@ picking up later don't get lost.
 - Fixed WSL write-check bug (too eager when config.js already present).
   Commit `2c8d322`.
 - Danny created GitHub Projects board.
-- Added authorship policy to CLAUDE.md.
+- Documented the project authorship policy.
 
 ### 2026-04-15
 - Close-out: deleted `create-audit-issues.sh`, linked issues #8–#14 from
   `INSTALL-AUDIT.md`. Commit `bd92c94`.
-- Created issues #8–#14 from the Copilot install-UX audit.
+- Created issues #8–#14 from the installation audit.
 - Created tracking issue #15 with #8–#14 as sub-issues.
 - **#13 short-term** — vendored fx-autoconfig under `vendor/fx-autoconfig/`
   pinned to upstream `54f88294`. Both installers now work offline. Commit

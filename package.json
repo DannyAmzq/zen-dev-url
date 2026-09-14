@@ -2,6 +2,7 @@
   "name": "zen-dev-url",
   "version": "1.2.0-beta.1",
   "private": true,
+  "author": "DannyAmzq",
   "description": "A development toolbar for Zen Browser with remembered site preferences.",
   "license": "UNLICENSED",
   "engines": { "node": ">=20" },
