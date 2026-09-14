@@ -1,0 +1,19 @@
+{
+  "id": "zen-dev-url",
+  "name": "devbar",
+  "description": "A development toolbar for Zen with a full URL and remembered site choices.",
+  "author": "DannyAmzq",
+  "homepage": "https://github.com/DannyAmzq/zen-dev-url",
+  "version": "1.2.0-beta.1",
+  "fork": ["zen"],
+  "ai": "partial",
+  "tags": ["development", "url", "toolbar"],
+  "style": { "chrome": "devbar.css" },
+  "scripts": {
+    "devbar.uc.js": {
+      "name": "Development toolbar",
+      "loadOrder": 10,
+      "include": ["chrome://browser/content/browser.xhtml"]
+    }
+  }
+}
