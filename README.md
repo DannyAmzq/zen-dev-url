@@ -4,6 +4,8 @@
 
 An Arc-inspired toolbar that appears on localhost and other development sites. Edit the address, open DevTools, and remember which sites should show the bar.
 
+Created and maintained by [DannyAmzq](https://github.com/DannyAmzq).
+
 [Get started](docs/INSTALLATION.md) · [Releases](https://github.com/DannyAmzq/zen-dev-url/releases) · [Report a bug](https://github.com/DannyAmzq/zen-dev-url/issues/new?template=bug_report.md)
 
 ![devbar showing the complete localhost path and query above a sample development page](docs/media/beta-toolbar.png)
