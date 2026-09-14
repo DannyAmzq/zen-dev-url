@@ -17,3 +17,18 @@ Runtime behavior lives in `devbar.uc.js` and styles in `devbar.css`. The editabl
 Keep URL handling text-based, navigation explicit, and listeners removable on shutdown. Add meaningful policy tests when matching or preference behavior changes. Browser APIs still need live testing: record the exact tested Zen version and relevant scenarios in the pull request. Mocked test results are not browser-compatibility evidence.
 
 Update installation and removal instructions when files or preferences change. Preserve attribution and the vendored fx-autoconfig license. No root project license has been inferred from that dependency's license.
+
+## Run checks
+
+Use Node.js 20 or later. No package installation is needed for these checks:
+
+```sh
+npm run check
+npm run package
+```
+
+The runtime tests use browser mocks. `npm run package` writes install/source ZIPs and SHA-256 checksums to `dist/`.
+
+On Windows, run `tests/css-block.test.ps1` and `tests/installer-cli.test.ps1` with PowerShell. On macOS/Linux, run `bash tests/css-block.test.sh`. These suites use temporary fixtures; they do not install into your browser profile.
+
+[GitHub Actions](.github/workflows/check.yml) runs Node checks and packaging on Ubuntu and Windows, plus Bash or PowerShell installer fixtures. Windows also checks PowerShell 5.1 compatibility. A passing fixture does not verify a real Linux or macOS browser installation; use the [live beta checklist](docs/BETA-TESTING.md) for that.
