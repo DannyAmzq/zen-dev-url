@@ -20,4 +20,3 @@ Describe your localhost, staging, or other workflow without private project deta
 
 - Zen version and OS:
 - devbar version:
-

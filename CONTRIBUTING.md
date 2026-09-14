@@ -17,4 +17,3 @@ Runtime behavior lives in `devbar.uc.js` and styles in `devbar.css`. The editabl
 Keep URL handling text-based, navigation explicit, and listeners removable on shutdown. Add meaningful policy tests when matching or preference behavior changes. Browser APIs still need live testing: record the exact tested Zen version and relevant scenarios in the pull request. Mocked test results are not browser-compatibility evidence.
 
 Update installation and removal instructions when files or preferences change. Preserve attribution and the vendored fx-autoconfig license. No root project license has been inferred from that dependency's license.
-

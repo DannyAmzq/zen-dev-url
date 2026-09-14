@@ -54,4 +54,3 @@ Record **Pass**, **Fail**, or **Not tested** for each check. Include other UI mo
 Before announcing a public beta, record a clean-profile installation and removal on the maintainer's actual Zen version, complete the smoke test, and capture a real demo. Reproduce known layout failures and state them in release notes. Each supported-platform claim needs that platform's own record.
 
 Ask testers what they used, what failed, and whether they kept it enabled after a few days. Installation friction and lack of workflow fit are useful feedback too.
-
