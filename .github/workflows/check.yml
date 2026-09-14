@@ -1,0 +1,35 @@
+name: Check beta
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  check:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm run check
+      - name: PowerShell CSS and isolated installer CLI fixtures
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./tests/css-block.test.ps1
+          ./tests/installer-cli.test.ps1
+      - name: Bash syntax and CSS preservation fixtures
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          bash -n install.sh
+          bash -n scripts/css-block.sh
+          bash -n tests/css-block.test.sh
+          bash tests/css-block.test.sh
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beta-packages-${{ matrix.os }}
+          path: dist/*

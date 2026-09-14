@@ -2,12 +2,15 @@
 
 > A developer-mode mod for [Zen Browser](https://zen-browser.app) — construction-stripe banner, URL controls, and DevTools shortcuts that activate automatically on local dev URLs.
 
-<!-- MEDIA: hero screenshot or GIF of the banner in action -->
-<!-- ![devbar banner demo](docs/media/banner-demo.gif) -->
+**1.2.0-beta.1 candidate:** this update adds remembered per-site choices and an always-available settings shortcut while retaining native URL suggestions, the viewport readout, actions, and detection settings. Validated on **Windows 11 with Zen 1.22.1b**; see the [current validation record](docs/BETA-VALIDATION.md) for the checks performed and their limits. See [installation and removal](docs/INSTALLATION.md), [configuration](docs/CONFIGURATION.md), and the [beta checklist](docs/BETA-TESTING.md).
+
+![devbar beta toolbar in Zen 1.22.1b on Windows 11](docs/media/beta-toolbar.png)
 
 ---
 
 ## What it looks like
+
+The screenshots below show the earlier April interface. The image above and validation record cover the current beta.
 
 <!-- MEDIA: side-by-side screenshot — normal vs dev URL -->
 <!-- ![Before and after](docs/media/before-after.png) -->
@@ -40,8 +43,9 @@ When you navigate to a local dev URL, devbar:
 |---|---|
 | **URL display** | Shows the current URL; click to edit, `Enter` to navigate, `Escape` to cancel |
 | **Copy** | Copies the URL — shows Zen's native toast |
-| **Trash** | Clears cookies, storage, and all caches for the site, then hard-reloads |
+| **Trash** | Confirms the registered-domain and subdomain scope, clears site data, then reloads the original tab after success; can sign you out |
 | **Reload** | Hard reload (bypass cache only — preserves auth/cookies) |
+| **Screenshot** | Toggles the Firefox Screenshots panel |
 | **Inspector** | Opens DevTools element picker |
 | **Console** | Toggles DevTools console |
 | **Network** | Toggles DevTools network panel |
@@ -60,11 +64,11 @@ When you navigate to a local dev URL, devbar:
 - Custom host patterns (glob syntax, e.g. `*.vercel.app`, `*.ngrok.io`)
 
 **Network**
-- Disable HTTP cache while in dev mode
-- Allow mixed content (HTTPS page loading HTTP resources)
+- Toggle the global HTTP-cache preference (`devtools.cache.disabled`); this setting is not restored when dev mode ends
+- Toggle global mixed-content blocking (HTTPS pages loading HTTP resources)
 
 **Page**
-- Disable JavaScript for the current tab
+- Toggle JavaScript globally (`javascript.enabled`)
 
 **DevTools**
 - Auto-open DevTools on every dev URL navigation
@@ -80,9 +84,11 @@ All settings are saved to `about:config` prefs and survive restarts.
 
 ### Keyboard shortcut
 
-`Alt+Shift+D` — toggle dev mode on/off from anywhere.
+`Alt+Shift+D` — toggle dev mode for the current HTTP(S) origin and remember the choice across restarts. An origin includes scheme, hostname, and effective port; paths share a choice. Settings offers **Automatic / Always on / Always off**. Automatic removes the override and uses the existing detection rules. Private-window choices also persist in profile preferences; see [configuration](docs/CONFIGURATION.md).
 
-The forced state is tied to the browser element (tab), so it **persists across navigations in the same tab** — if you force dev mode on while visiting `example.com` and then navigate to `other.com`, the banner stays on. Press `Alt+Shift+D` again or close the tab to clear it.
+`Alt+Shift+O` — open the settings panel even when the bar is hidden or globally disabled. Settings also exposes the master switch and an option to hide developer action buttons. Selecting Always on re-enables the master switch.
+
+Non-HTTP(S) pages retain temporary per-tab shortcut behavior. This differs from the persistent HTTP(S) origin setting.
 
 ### Detected URLs (defaults)
 
@@ -120,7 +126,7 @@ The script will:
 1. Detect your Zen profile automatically
 2. Install fx-autoconfig if not already present (requires `sudo` to write into `Zen.app`)
 3. Copy the userscript to `chrome/JS/`
-4. Append the CSS to `chrome/userChrome.css` (idempotent — safe to re-run)
+4. Install a bounded CSS block in `chrome/userChrome.css`, backing it up and preserving unrelated rules
 
 After that, follow the one-time prompt to enable `toolkit.legacyUserProfileCustomizations.stylesheets` in `about:config`, then restart Zen.
 
@@ -134,7 +140,7 @@ Double-click **`install.bat`** — it handles execution policy automatically. Or
 .\install.ps1
 ```
 
-The script detects your profile from `%APPDATA%\zen\profiles.ini`, installs fx-autoconfig, copies the userscript, and appends the CSS.
+The script detects profiles from `%APPDATA%\zen\profiles.ini`, installs fx-autoconfig, copies the userscript, and installs a bounded CSS block. Select a single profile with `-ProfilePath "<profile>"`; otherwise it retains multi-profile behavior. Preview with `-DryRun`.
 
 After that, follow the one-time prompt in `about:config`, then restart Zen.
 
@@ -236,7 +242,7 @@ Then **fully quit and reopen Zen** (File → Quit, not just close window).
    - macOS: `~/Library/Application Support/Zen/Profiles/<profile>/chrome/JS/`
    - Windows: `%APPDATA%\zen\<profile>\chrome\JS\`
 
-2. **CSS** — append the contents of `devbar.css` to your `chrome/userChrome.css`
+2. **CSS** — copy `devbar.css` to `chrome/`, then add `@import url("devbar.css");` before ordinary rules in `userChrome.css`. Keep unrelated rules; remove only a previous devbar block if present. See [safe update/removal instructions](docs/INSTALLATION.md).
 
 3. **Enable userChrome** — in `about:config`, set `toolkit.legacyUserProfileCustomizations.stylesheets` to `true`
 
@@ -288,6 +294,9 @@ Both `install.sh` and `install.ps1` accept the following flags:
 | `--uninstall` | `-Uninstall` | Remove devbar files from all profiles |
 | `--verify` | `-Verify` | Check that the install is healthy |
 | `--dry-run` | `-DryRun` | Show what would be done, change nothing |
+| `--profile DIR` | `-ProfilePath DIR` | Limit installation, verification, or removal to one existing profile |
+
+The beta uses bounded CSS markers and backups. Known old blocks migrate; ambiguous legacy blocks require manual cleanup. Manual CSS imports must be removed manually when uninstalling. See [installation and removal](docs/INSTALLATION.md).
 
 ```bash
 # Check if everything is installed correctly
@@ -354,6 +363,8 @@ All preferences are under `devbar.*`. You can tweak them directly in `about:conf
 | `devbar.auto-open-devtools` | `false` | Auto-open DevTools on every dev URL navigation |
 | `devbar.auto-open-panel` | `"webconsole"` | Which panel auto-open uses (`webconsole` / `netmonitor` / `inspector`) |
 | `devbar.self-tests` | `false` | Run logic self-tests on window open and print results to the console (for contributors) |
+| `devbar.site-rules` | `"{}"` | Remembered HTTP(S) origins mapped to `"on"` or `"off"`; Automatic removes the entry |
+| `devbar.show-actions` | `true` | Show developer action buttons in the banner |
 
 **Firefox prefs** (not owned by this mod — the settings panel just toggles them so your changes survive restart):
 
@@ -381,5 +392,7 @@ No native code, no extensions API, no remote requests.
 ## Contributing
 
 Issues and PRs welcome. The dev branch is `dev` — please target that, not `main`.
+
+Use the [contribution guide](CONTRIBUTING.md) and [beta test checklist](docs/BETA-TESTING.md). Report this mod's bugs in [this repository's Issues](https://github.com/DannyAmzq/zen-dev-url/issues), with your exact Zen version, OS, loader, other UI mods, and steps. Redact private URLs and tokens. Security reporting is described in [SECURITY.md](SECURITY.md).
 
 <!-- MEDIA: optional contributor guide link or badge row -->
