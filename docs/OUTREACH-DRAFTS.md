@@ -47,5 +47,3 @@ No pressure if you don't use Zen or don't need this workflow — that helps me f
 ## Follow-up after testing
 
 Thanks for trying it. Did you leave it enabled? If you removed it, was that because of installation trouble, a bug, the space it takes, or because you didn't need it? A short answer is enough.
-
-

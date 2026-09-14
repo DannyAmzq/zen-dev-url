@@ -15,4 +15,3 @@ GitHub private vulnerability reporting was disabled when checked on 2026-09-14. 
 Include affected versions, reproduction steps using dummy data, impact, and any suggested fix. Do not share real credentials or a complete browser profile.
 
 Only the current beta candidate is in scope for maintenance; no response-time guarantee or security audit is claimed.
-

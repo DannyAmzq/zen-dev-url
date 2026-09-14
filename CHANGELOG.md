@@ -14,4 +14,3 @@ Live Zen compatibility and public distribution remain subject to the [beta check
 ## Earlier releases
 
 This candidate builds on the existing public [devbar repository](https://github.com/DannyAmzq/zen-dev-url) and its April implementation. It is not the project's first public source release. Historical details remain in GitHub Releases and FOLLOWUP.md.
-

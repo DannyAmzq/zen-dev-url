@@ -31,4 +31,3 @@ Include a sanitized screenshot or relevant console error. Remove credentials, to
 
 - Does it reproduce in a separate profile with only this mod?
 - Does removing this mod resolve it?
-
