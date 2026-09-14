@@ -1,4 +1,4 @@
-# Shared installer functions. Dot-sourcing this file never touches a profile.
+﻿# Shared installer functions. Dot-sourcing this file never touches a profile.
 function Remove-DevbarCssBlock {
   param([AllowEmptyString()][string]$Content, [string]$LegacyCss)
   $begin = '/* devbar:begin */'

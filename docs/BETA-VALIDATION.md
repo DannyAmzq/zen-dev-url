@@ -35,6 +35,7 @@ Automated regression checks:
 - `tests/css-block.test.ps1`: **19 CSS preservation assertions passed**.
 - `tests/css-block.test.sh`: **19 CSS preservation assertions passed** under Git Bash on Windows.
 - `tests/installer-cli.test.ps1`: selected-profile dry run, failed verification exit status, and conflicting-mode rejection passed against temporary fixtures.
+- Both PowerShell fixture suites passed in Windows PowerShell 5.1 and PowerShell 7. UTF-8 BOMs keep the installer's non-ASCII text readable by 5.1; expected negative-test exit codes do not leak into the suite result.
 - GitHub CI covers Node checks and packaging on Windows and Ubuntu, with each platform's applicable installer fixtures. Consult the PR checks for CI results.
 
 ![Actual toolbar on the disposable local development fixture](media/beta-toolbar.png)

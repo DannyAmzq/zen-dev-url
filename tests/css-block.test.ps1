@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../scripts/css-block.ps1')
 $legacy = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../scripts/legacy-devbar-v1.1.0.css'))
 $checks = 0
