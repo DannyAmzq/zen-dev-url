@@ -21,10 +21,12 @@ warn()    { echo -e "${YELLOW}[devbar]${NC} $1"; }
 error()   { echo -e "${RED}[devbar]${NC} $1"; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/scripts/css-block.sh"
 
 # ── 0. Parse CLI flags ──────────────────────────────────────
 
 MODE="install"
+PROFILE_PATH=""
 
 show_help() {
   cat <<'HELP'
@@ -37,20 +39,23 @@ Options:
       --uninstall   Remove devbar files from all detected profiles
       --verify      Check whether devbar is correctly installed
       --dry-run     Show what would be done without making changes
+      --profile DIR Target one existing profile directory instead of all channels
 
 Without options, installs devbar to all detected Zen profiles.
 HELP
   exit 0
 }
 
-for arg in "$@"; do
-  case "$arg" in
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     --help|-h)      show_help ;;
-    --uninstall)    MODE="uninstall" ;;
-    --verify)       MODE="verify" ;;
-    --dry-run)      MODE="dry-run" ;;
-    *)              error "Unknown option: $arg (try --help)" ;;
+    --uninstall)    [[ "$MODE" == install ]] || error "Choose only one mode flag"; MODE="uninstall" ;;
+    --verify)       [[ "$MODE" == install ]] || error "Choose only one mode flag"; MODE="verify" ;;
+    --dry-run)      [[ "$MODE" == install ]] || error "Choose only one mode flag"; MODE="dry-run" ;;
+    --profile)     [[ $# -ge 2 ]] || error "--profile requires a directory"; PROFILE_PATH="$2"; shift ;;
+    *)              error "Unknown option: $1 (try --help)" ;;
   esac
+  shift
 done
 
 VERSION=$(sed -n "s/.*DEVBAR_VERSION *= *'\([^']*\)'.*/\1/p" "$SCRIPT_DIR/devbar.uc.js" 2>/dev/null)
@@ -170,6 +175,10 @@ fi
 # Reset the flag on any non-Install section header so we don't accidentally
 # pick up the boolean Default=1 that appears in [Profile] sections.
 
+if [[ -n "$PROFILE_PATH" ]]; then
+  [[ -d "$PROFILE_PATH" ]] || error "Profile directory does not exist: $PROFILE_PATH"
+  PROFILE_DIRS=("$(cd "$PROFILE_PATH" && pwd)")
+else
 [[ -f "$PROFILES_INI" ]] || error "Could not find profiles.ini at: $PROFILES_INI"
 _ini_base=$(dirname "$PROFILES_INI")
 
@@ -201,12 +210,28 @@ while IFS= read -r p; do
     PROFILE_DIRS+=("$_ini_base/$p")
   fi
 done <<< "$_raw_paths"
+fi
 
 if [[ ${#PROFILE_DIRS[@]} -eq 1 ]]; then
   info "Detected profile: ${PROFILE_DIRS[0]}"
 else
   info "Detected ${#PROFILE_DIRS[@]} Zen channel profiles — installing to all:"
   for p in "${PROFILE_DIRS[@]}"; do info "  $p"; done
+fi
+
+# Validate every target's CSS before any install/uninstall writes.
+if [[ "$MODE" == install || "$MODE" == uninstall ]]; then
+  LEGACY_CSS=$(cat "$SCRIPT_DIR/scripts/legacy-devbar-v1.1.0.css"; printf '.')
+  LEGACY_CSS="${LEGACY_CSS%.}"
+  for _profile in "${PROFILE_DIRS[@]}"; do
+    [[ -d "$_profile" ]] || continue
+    _existing=''
+    if [[ -f "$_profile/chrome/userChrome.css" ]]; then
+      _existing=$(cat "$_profile/chrome/userChrome.css"; printf '.')
+      _existing="${_existing%.}"
+    fi
+    devbar_strip_css "$_existing" "$LEGACY_CSS" || error "CSS preflight failed; no installation changes made"
+  done
 fi
 
 # ── Mode: --verify ──────────────────────────────────────────
@@ -232,7 +257,7 @@ if [[ "$MODE" == "verify" ]]; then
       warn "✘ Userscript MISSING at $PROFILE_DIR/chrome/JS/"; FAIL=$((FAIL + 1))
     fi
 
-    if grep -qF "/* devbar */" "$PROFILE_DIR/chrome/userChrome.css" 2>/dev/null; then
+    if grep -qE '/\* devbar(:begin)? \*/' "$PROFILE_DIR/chrome/userChrome.css" 2>/dev/null; then
       success "✔ CSS styles present in userChrome.css"; PASS=$((PASS + 1))
     else
       warn "✘ CSS styles MISSING from userChrome.css"; FAIL=$((FAIL + 1))
@@ -257,6 +282,7 @@ if [[ "$MODE" == "verify" ]]; then
     success "All checks passed ($PASS/$((PASS + FAIL)))"
   else
     warn "$FAIL of $((PASS + FAIL)) checks failed"
+    exit 1
   fi
   exit 0
 fi
@@ -278,23 +304,13 @@ if [[ "$MODE" == "uninstall" ]]; then
       warn "Userscript not found, skipping"
     fi
 
-    # Strip CSS block (from marker to EOF — check both new and old markers)
     _css="$PROFILE_DIR/chrome/userChrome.css"
-    _marker="/* devbar */"
-    _old_marker="/* zen-dev-url */"
-    # Strip old marker first if present
-    if [[ -f "$_css" ]] && grep -qF "$_old_marker" "$_css"; then
-      _line=$(grep -nF "$_old_marker" "$_css" | head -1 | cut -d: -f1)
-      head -n $((_line - 1)) "$_css" > "$_css.tmp" && mv "$_css.tmp" "$_css"
-      success "Removed old zen-dev-url styles from userChrome.css"
-    fi
-    if [[ -f "$_css" ]] && grep -qF "$_marker" "$_css"; then
-      # Portable: truncate file at the marker line
-      _line=$(grep -nF "$_marker" "$_css" | head -1 | cut -d: -f1)
-      head -n $((_line - 1)) "$_css" > "$_css.tmp" && mv "$_css.tmp" "$_css"
-      success "Removed devbar styles from userChrome.css"
-    else
-      warn "No devbar styles found in userChrome.css, skipping"
+    if [[ -f "$_css" ]]; then
+      _existing=$(cat "$_css"; printf '.')
+      _existing="${_existing%.}"
+      devbar_strip_css "$_existing" "$LEGACY_CSS" || error "CSS cleanup aborted"
+      devbar_write_css "$_css" "$DEVBAR_CSS_RESULT"
+      success "Removed only the devbar CSS block; backup saved alongside userChrome.css"
     fi
 
     REMOVED=$((REMOVED + 1))
@@ -333,9 +349,9 @@ if [[ "$MODE" == "dry-run" ]]; then
     info "    • Copy fx-autoconfig utils → chrome/utils/"
     info "    • Copy devbar.uc.js → chrome/JS/"
     if grep -qF "/* devbar */" "$PROFILE_DIR/chrome/userChrome.css" 2>/dev/null; then
-      info "    • CSS already present (skip)"
+      info "    • Validate old CSS boundary; back up and replace only the devbar block"
     else
-      info "    • Append devbar.css → userChrome.css"
+      info "    • Append a bounded devbar CSS block; preserve existing rules"
     fi
   done
 
@@ -455,27 +471,18 @@ for PROFILE_DIR in "${PROFILE_DIRS[@]}"; do
   cp "$SCRIPT_DIR/devbar.uc.js" "$JS_DIR/"
   success "Copied userscript to $JS_DIR"
 
-  # CSS — always refresh. If an existing devbar block is present,
-  # strip everything from the marker to EOF and re-append, so re-running
-  # install.sh picks up CSS changes (icons, stripe colors, etc). Without
-  # this, users who installed once and then `git pull`'d would get JS
-  # updates but frozen CSS.
   CHROME_CSS="$PROFILE_DIR/chrome/userChrome.css"
-  # Migration: strip old /* zen-dev-url */ CSS block if present
-  _old_marker="/* zen-dev-url */"
-  if grep -qF "$_old_marker" "$CHROME_CSS" 2>/dev/null; then
-    _line=$(grep -nF "$_old_marker" "$CHROME_CSS" | head -1 | cut -d: -f1)
-    head -n $((_line - 1)) "$CHROME_CSS" > "$CHROME_CSS.tmp" && mv "$CHROME_CSS.tmp" "$CHROME_CSS"
-    info "Stripped old zen-dev-url styles (renamed to devbar)"
+  _existing=''
+  if [[ -f "$CHROME_CSS" ]]; then
+    _existing=$(cat "$CHROME_CSS"; printf '.')
+    _existing="${_existing%.}"
   fi
-  MARKER="/* devbar */"
-  if grep -qF "$MARKER" "$CHROME_CSS" 2>/dev/null; then
-    _line=$(grep -nF "$MARKER" "$CHROME_CSS" | head -1 | cut -d: -f1)
-    head -n $((_line - 1)) "$CHROME_CSS" > "$CHROME_CSS.tmp" && mv "$CHROME_CSS.tmp" "$CHROME_CSS"
-    info "Stripped existing devbar styles before re-appending."
-  fi
-  { echo ""; echo "$MARKER"; cat "$SCRIPT_DIR/devbar.css"; } >> "$CHROME_CSS"
-  success "Appended styles to $CHROME_CSS"
+  devbar_strip_css "$_existing" "$LEGACY_CSS" || error "CSS cleanup aborted"
+  _new_css=$(cat "$SCRIPT_DIR/devbar.css"; printf '.')
+  _new_css="${_new_css%.}"
+  _combined="$DEVBAR_CSS_RESULT"$'\n/* devbar:begin */\n'"$_new_css"$'\n/* devbar:end */\n'
+  devbar_write_css "$CHROME_CSS" "$_combined"
+  success "Updated bounded devbar CSS block; existing stylesheet backed up"
 
   INSTALLED=$((INSTALLED + 1))
 done
