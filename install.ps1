@@ -10,7 +10,8 @@ param(
   [switch]$Help,
   [switch]$Uninstall,
   [switch]$Verify,
-  [switch]$DryRun
+  [switch]$DryRun,
+  [string]$ProfilePath
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,18 +34,21 @@ Options:
   -Uninstall    Remove devbar files from all detected profiles
   -Verify       Check whether devbar is correctly installed
   -DryRun       Show what would be done without making changes
+  -ProfilePath  Target one existing profile directory instead of all channels
 
 Without options, installs devbar to all detected Zen profiles.
 "@
   exit 0
 }
 
+if (@($Uninstall, $Verify, $DryRun | Where-Object { $_ }).Count -gt 1) { Fail 'Choose only one of -Uninstall, -Verify, or -DryRun.' }
 if     ($Uninstall) { $Mode = "uninstall" }
 elseif ($Verify)    { $Mode = "verify" }
 elseif ($DryRun)    { $Mode = "dry-run" }
 else                { $Mode = "install" }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $ScriptDir 'scripts\css-block.ps1')
 
 # Print version
 $verLine = Select-String -Path "$ScriptDir\devbar.uc.js" -Pattern "DEVBAR_VERSION\s*=\s*'([^']+)'" | Select-Object -First 1
@@ -74,6 +78,10 @@ Info "Zen resources: $ZenResources"
 # Reset $inInstall on any non-Install section header so we don't accidentally
 # pick up the boolean Default=1 that appears in [Profile] sections.
 
+if ($ProfilePath) {
+  if (-not (Test-Path -LiteralPath $ProfilePath -PathType Container)) { Fail "Profile directory does not exist: $ProfilePath" }
+  $ProfileDirs = @((Resolve-Path -LiteralPath $ProfilePath).Path)
+} else {
 $ProfilesIni = "$env:APPDATA\zen\profiles.ini"
 if (-not (Test-Path $ProfilesIni)) { Fail "profiles.ini not found at: $ProfilesIni" }
 
@@ -117,12 +125,24 @@ foreach ($p in $rawPaths) {
   }
 }
 if ($ProfileDirs.Count -eq 0) { Fail "No valid profile directories found." }
+}
 
 if ($ProfileDirs.Count -eq 1) {
   Info "Detected profile: $($ProfileDirs[0])"
 } else {
   Info "Detected $($ProfileDirs.Count) Zen channel profiles — installing to all:"
   foreach ($d in $ProfileDirs) { Info "  $d" }
+}
+
+# Validate every target's CSS before any install/uninstall writes.
+$PreparedCss = @{}
+if ($Mode -eq 'install' -or $Mode -eq 'uninstall') {
+  $legacy = [IO.File]::ReadAllText((Join-Path $ScriptDir 'scripts\legacy-devbar-v1.1.0.css'))
+  foreach ($target in $ProfileDirs) {
+    $cssPath = Join-Path $target 'chrome\userChrome.css'
+    $existing = if (Test-Path -LiteralPath $cssPath) { [IO.File]::ReadAllText($cssPath) } else { '' }
+    $PreparedCss[$target] = Remove-DevbarCssBlock -Content $existing -LegacyCss $legacy
+  }
 }
 
 # ── Mode: -Verify ───────────────────────────────────────────
@@ -147,7 +167,7 @@ if ($Mode -eq "verify") {
     }
 
     $css = Join-Path $ProfileDir "chrome\userChrome.css"
-    if ((Test-Path $css) -and (Get-Content $css -Raw) -match [regex]::Escape("/* devbar */")) {
+    if ((Test-Path $css) -and (Get-Content $css -Raw) -match '/\* devbar(?::begin)? \*/') {
       Success "✔ CSS styles present in userChrome.css"; $Pass++
     } else {
       Warn "✘ CSS styles MISSING from userChrome.css"; $FailCount++
@@ -174,6 +194,7 @@ if ($Mode -eq "verify") {
     Success "All checks passed ($Pass/$total)"
   } else {
     Warn "$FailCount of $total checks failed"
+    exit 1
   }
   exit 0
 }
@@ -195,32 +216,10 @@ if ($Mode -eq "uninstall") {
       Warn "Userscript not found, skipping"
     }
 
-    # Strip CSS block (from marker to EOF — check both new and old markers)
     $css = Join-Path $ProfileDir "chrome\userChrome.css"
-    # Strip old marker first if present
-    $OldMarker = "/* zen-dev-url */"
-    if ((Test-Path $css) -and (Get-Content $css -Raw) -match [regex]::Escape($OldMarker)) {
-      $lines = Get-Content $css
-      $idx = ($lines | Select-String -SimpleMatch $OldMarker | Select-Object -First 1).LineNumber - 1
-      if ($idx -gt 0) {
-        $lines[0..($idx - 1)] | Set-Content $css -Encoding UTF8
-      } else {
-        Set-Content $css "" -Encoding UTF8
-      }
-      Success "Removed old zen-dev-url styles from userChrome.css"
-    }
-    $Marker = "/* devbar */"
-    if ((Test-Path $css) -and (Get-Content $css -Raw) -match [regex]::Escape($Marker)) {
-      $lines = Get-Content $css
-      $idx = ($lines | Select-String -SimpleMatch $Marker | Select-Object -First 1).LineNumber - 1
-      if ($idx -gt 0) {
-        $lines[0..($idx - 1)] | Set-Content $css -Encoding UTF8
-      } else {
-        Set-Content $css "" -Encoding UTF8
-      }
-      Success "Removed devbar styles from userChrome.css"
-    } else {
-      Warn "No devbar styles found in userChrome.css, skipping"
+    if (Test-Path -LiteralPath $css) {
+      Write-DevbarCss -Path $css -Content $PreparedCss[$ProfileDir]
+      Success "Removed only the devbar CSS block; backup saved alongside userChrome.css"
     }
 
     $Removed++
@@ -256,9 +255,9 @@ if ($Mode -eq "dry-run") {
     Info "    • Copy devbar.uc.js → chrome\JS\"
     $css = Join-Path $ProfileDir "chrome\userChrome.css"
     if ((Test-Path $css) -and (Get-Content $css -Raw) -match [regex]::Escape("/* devbar */")) {
-      Info "    • CSS already present (skip)"
+      Info "    • Validate old CSS boundary; back up and replace only the devbar block"
     } else {
-      Info "    • Append devbar.css → userChrome.css"
+      Info "    • Append a bounded devbar CSS block; preserve existing rules"
     }
   }
 
@@ -319,36 +318,10 @@ foreach ($ProfileDir in $ProfileDirs) {
   Copy-Item "$ScriptDir\devbar.uc.js" $JsDir -Force
   Success "Copied userscript to $JsDir"
 
-  # CSS — always refresh. If an existing devbar block is present,
-  # strip everything from the marker to EOF and re-append, so re-running
-  # install.ps1 picks up CSS changes (icons, stripe colors, etc).
   $ChromeCss = Join-Path $ProfileDir "chrome\userChrome.css"
-  # Migration: strip old /* zen-dev-url */ CSS block if present
-  $OldMarker = "/* zen-dev-url */"
-  if ((Test-Path $ChromeCss) -and (Get-Content $ChromeCss -Raw) -match [regex]::Escape($OldMarker)) {
-    $lines = Get-Content $ChromeCss
-    $idx = ($lines | Select-String -SimpleMatch $OldMarker | Select-Object -First 1).LineNumber - 1
-    if ($idx -gt 0) {
-      $lines[0..($idx - 1)] | Set-Content $ChromeCss -Encoding UTF8
-    } else {
-      Set-Content $ChromeCss "" -Encoding UTF8
-    }
-    Info "Stripped old zen-dev-url styles (renamed to devbar)"
-  }
-  $Marker    = "/* devbar */"
-  if ((Test-Path $ChromeCss) -and (Get-Content $ChromeCss -Raw) -match [regex]::Escape($Marker)) {
-    $lines = Get-Content $ChromeCss
-    $idx = ($lines | Select-String -SimpleMatch $Marker | Select-Object -First 1).LineNumber - 1
-    if ($idx -gt 0) {
-      $lines[0..($idx - 1)] | Set-Content $ChromeCss -Encoding UTF8
-    } else {
-      Set-Content $ChromeCss "" -Encoding UTF8
-    }
-    Info "Stripped existing devbar styles before re-appending."
-  }
-  $cssContent = "`n$Marker`n" + (Get-Content "$ScriptDir\devbar.css" -Raw)
-  Add-Content -Path $ChromeCss -Value $cssContent -Encoding UTF8
-  Success "Appended styles to $ChromeCss"
+  $cssContent = $PreparedCss[$ProfileDir] + "`n/* devbar:begin */`n" + [IO.File]::ReadAllText((Join-Path $ScriptDir 'devbar.css')) + "`n/* devbar:end */`n"
+  Write-DevbarCss -Path $ChromeCss -Content $cssContent
+  Success "Updated bounded devbar CSS block; existing stylesheet backed up"
 
   $Installed++
 }
