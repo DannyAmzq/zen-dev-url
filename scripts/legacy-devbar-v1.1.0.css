@@ -53,12 +53,11 @@
 /* Dev banner shown above the page content */
 #devbar-banner {
     display: flex;
-    flex: 0 0 auto;
-    box-sizing: border-box;
-    min-width: 0;
-    min-height: 44px;
-    position: relative;
-    container-type: inline-size;
+    visibility: hidden;
+    pointer-events: none;
+    position: fixed;
+    top: 0;
+    height: 44px;
     /* Inside #browser's stacking context: above content (#zen-tabbox-wrapper z:0)
        and below the compact-mode floating sidebar (#navigator-toolbox z:10),
        so the sidebar can slide over the banner on hover. */
@@ -77,7 +76,8 @@
         rgba(50, 22, 10, 0.88);
     border-bottom: 1.5px solid #ff6b35;
     cursor: default;
-    margin: 0 var(--zen-element-separation, 8px) 4px 0;
+    opacity: 0;
+    transition: opacity 0.15s ease, visibility 0.15s ease;
 }
 
 :root[devbar] #devbar-banner {
@@ -86,12 +86,26 @@
     opacity: 1;
 }
 
-/* Browser content, split panes, screenshots, and fullscreen warnings keep
-   their own native geometry; the banner reserves its space in normal flow. */
-#devbar-banner[hidden],
-:root[inDOMFullscreen="true"] #devbar-banner,
-:root[customizing] #devbar-banner {
-    display: none !important;
+/* Push the page content down so the banner doesn't overlap it */
+:root[devbar] #tabbrowser-tabpanels > .browserSidebarContainer {
+    padding-top: 44px !important;
+    background-color: rgba(50, 22, 10, 0.82) !important;
+}
+
+/* Push Zen chrome elements below the dev banner */
+:root[devbar] #zen-toast-container {
+    top: 52px !important;
+}
+
+:root[devbar] .screenshotsPagePanel {
+    margin-top: 44px !important;
+}
+
+:root[devbar] #zen-splitview-overlay-wrapper,
+:root[devbar] #fullscreen-warning,
+:root[devbar] #pointerlock-warning,
+:root[devbar] #fullscr-toggler {
+    margin-top: 44px !important;
 }
 
 #devbar-banner:hover {
@@ -512,28 +526,4 @@
 
 .devbar-select:focus {
     border-color: rgba(255, 107, 53, 0.75) !important;
-}
-
-/* Beta: keyboard access, remembered site choices, and narrow content areas. */
-#devbar-site-origin {
-    padding: 4px 14px;
-    overflow-wrap: anywhere;
-    font: 11px/1.5 monospace;
-}
-#devbar-site-mode { margin: 4px 14px 8px; width: calc(100% - 28px); }
-#devbar-settings-panel { box-sizing: border-box; max-height: calc(100vh - 100px); overflow-y: auto; }
-#devbar-settings-panel [aria-invalid="true"] { outline: 2px solid #ff8068; }
-.devbar-validation { margin: 4px 0; color: #ffac9b; font-size: 11px; }
-.devbar-btn:focus-visible, .devbar-action-btn:focus-visible,
-.devbar-toggle input:focus-visible + .devbar-toggle-track,
-.devbar-select:focus-visible, .devbar-text-input:focus-visible {
-    outline: 2px solid #ff9c73;
-    outline-offset: 2px;
-}
-:root[devbar-hide-actions] #devbar-banner .devbar-btn:not(#devbar-copy-link):not(#devbar-settings),
-:root[devbar-hide-actions] #devbar-banner .devbar-separator,
-:root[devbar-hide-actions] #devbar-viewport { display: none; }
-@container (max-width: 650px) {
-    #devbar-banner .devbar-btn:not(#devbar-copy-link):not(#devbar-settings),
-    #devbar-banner .devbar-separator, #devbar-viewport { display: none; }
 }
