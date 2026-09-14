@@ -20,3 +20,5 @@ desktop.ini
 *.tmp
 *.bak
 *~
+dist/
+node_modules/

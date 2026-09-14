@@ -1,6 +1,8 @@
 // ==UserScript==
 // @name           devbar
 // @description    Highlights the URL bar and shows a dev banner when on localhost or local dev URLs
+// @version        1.2.0-beta.1
+// @include        main
 // ==/UserScript==
 
 /**
@@ -19,13 +21,111 @@
  */
 
 (function () {
-  const DEVBAR_VERSION = '20260426-2';
+  if (location.href !== 'chrome://browser/content/browser.xhtml') return;
+  const DEVBAR_VERSION = '1.2.0-beta.1';
   console.log(`%c[devbar] v${DEVBAR_VERSION} loaded`, 'color:#ff6b35;font-weight:bold');
 
   // Prevent double-init across window reloads (also blocks old zen-dev-url copy)
   if (window.__devbar || window.__zenDevUrlDetector) return;
 
   const detector = {
+    _abort: new AbortController(),
+    _timers: new Set(),
+    _frames: new Set(),
+    _observedPrefs: [],
+    _destroyed: false,
+    _initialized: false,
+    _siteRules: Object.create(null),
+    _listen(target, type, callback, options = {}) {
+      target.addEventListener(type, callback, {
+        ...(typeof options === 'boolean' ? { capture: options } : options),
+        signal: this._abort.signal,
+      });
+    },
+    _setTimeout(callback, delay) {
+      const id = window.setTimeout(() => {
+        this._timers.delete(id);
+        if (!this._destroyed) callback();
+      }, delay);
+      this._timers.add(id);
+      return id;
+    },
+    _clearTimeout(id) { window.clearTimeout(id); this._timers.delete(id); },
+    _requestFrame(callback) {
+      const id = window.requestAnimationFrame(() => {
+        this._frames.delete(id);
+        if (!this._destroyed) callback();
+      });
+      this._frames.add(id);
+      return id;
+    },
+    _run(action) {
+      try { Promise.resolve(action()).catch(error => console.error('[devbar] action failed:', error)); }
+      catch (error) { console.error('[devbar] action failed:', error); }
+    },
+    _origin(uri = gBrowser.currentURI) {
+      try {
+        const url = new URL(typeof uri === 'string' ? uri : uri.spec);
+        return ['http:', 'https:'].includes(url.protocol) ? url.origin : null;
+      } catch { return null; }
+    },
+    _readSiteRules() {
+      this._siteRules = Object.create(null);
+      try {
+        const parsed = JSON.parse(Services.prefs.getStringPref('devbar.site-rules', '{}'));
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+        for (const [key, mode] of Object.entries(parsed)) {
+          const origin = this._origin(key);
+          if (origin && (mode === 'on' || mode === 'off')) this._siteRules[origin] = mode;
+        }
+      } catch (error) { console.error('[devbar] invalid site rules:', error); }
+    },
+    _setSiteMode(mode, origin = this._origin()) {
+      if (!origin || !['auto', 'on', 'off'].includes(mode)) return;
+      if (mode === 'auto') delete this._siteRules[origin];
+      else this._siteRules[origin] = mode;
+      Services.prefs.setStringPref('devbar.site-rules', JSON.stringify(this._siteRules));
+      if (mode === 'on') Services.prefs.setBoolPref(this.PREF, true);
+      this._update();
+    },
+    _matchesCurrentMode(uri = gBrowser.currentURI, browser = gBrowser.selectedBrowser) {
+      if (!this._prefs?.enabled) return false;
+      const origin = this._origin(uri);
+      const mode = origin && this._siteRules[origin];
+      if (mode) return mode === 'on';
+      return this._forcedBrowsers.has(browser) ||
+        (this._isDevUri(uri) && !this._excludedBrowsers.has(browser));
+    },
+    _toggleSite() {
+      const active = this._matchesCurrentMode();
+      const origin = this._origin();
+      if (origin) this._setSiteMode(active ? 'off' : 'on', origin);
+      else {
+        // Keep the original per-tab toggle for file/internal pages.
+        const browser = gBrowser.selectedBrowser;
+        (active ? this._excludedBrowsers : this._forcedBrowsers).add(browser);
+        (active ? this._forcedBrowsers : this._excludedBrowsers).delete(browser);
+        if (!active) Services.prefs.setBoolPref(this.PREF, true);
+        this._update();
+      }
+      this._showToast(active ? 'Devbar off for this site' : 'Devbar on for this site');
+    },
+    _validateDetectionInput(prefKey, value) {
+      const entries = value.split(',').map(part => part.trim()).filter(Boolean);
+      if (prefKey === 'devbar.custom-ports') {
+        return entries.some(port => !/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)
+          ? 'Use comma-separated ports from 1 to 65535. Changes were not saved.' : '';
+      }
+      if (prefKey === 'devbar.custom-patterns') {
+        const invalid = entries.some(host => {
+          if (/^[a-z\d_*?.-]+$/i.test(host) && host !== '*' && host !== '?') return false;
+          try { return !host.includes(':') || new URL(`http://[${host}]/`).hostname === ''; }
+          catch { return true; }
+        });
+        return invalid ? 'Use hosts or host patterns (* and ?), without schemes, ports, or paths. Changes were not saved.' : '';
+      }
+      return '';
+    },
     /** about:config preference key that enables/disables the indicator */
     PREF: 'devbar.enabled',
 
@@ -63,6 +163,7 @@
      * Call once in init() then again inside observe() on any pref change.
      */
     _readPrefs() {
+      this._readSiteRules();
       const sp = Services.prefs;
       const rawPorts    = sp.getStringPref('devbar.custom-ports', '');
       const rawPatterns = sp.getStringPref('devbar.custom-patterns', '');
@@ -99,6 +200,8 @@
      * the dev banner DOM element.
      */
     init() {
+      if (this._initialized || this._destroyed) return;
+      this._initialized = true;
       this._isEditing = false;
       // Populate pref cache before any _update() / _isDevUri() calls
       this._readPrefs();
@@ -106,7 +209,7 @@
       // Listen for navigation in any tab
       gBrowser.addTabsProgressListener(this._progressListener);
       // Listen for tab switches
-      window.addEventListener('TabSelect', this);
+      detector._listen(window, 'TabSelect', this);
       // Listen for pref changes — _readPrefs() + _update() run on each change
       for (const key of [
         this.PREF,
@@ -117,60 +220,29 @@
         'devbar.custom-patterns',
         'devbar.auto-open-devtools',
         'devbar.auto-open-panel',
+        'devbar.site-rules',
+        'devbar.show-actions',
       ]) {
         Services.prefs.addObserver(key, this);
+        this._observedPrefs.push(key);
       }
       // Top-level error handler: tag any uncaught error from our script so bug
       // reports include a recognisable prefix rather than a bare stack trace.
-      window.addEventListener('error', (e) => {
+      detector._listen(window, 'error', (e) => {
         if (e.filename?.includes('devbar.uc.js')) {
           console.error('[devbar] FATAL:', e.message, 'at', `${e.filename}:${e.lineno}`);
         }
       }, true);
-      // Alt+Shift+D toggles dev mode for the current tab.
-      // Works on any URL — forced-on overrides URL checks, forced-off suppresses
-      // the banner even on dev URLs. mozSystemGroup: true fires before web content.
-      window.addEventListener('keydown', (e) => {
-        if (e.altKey && e.shiftKey && e.code === 'KeyD') {
-          // Respect the master off switch BEFORE eating the event — otherwise
-          // a disabled mod still swallows the user's Alt+Shift+D.
-          if (!this._prefs.enabled) return;
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          const browser = gBrowser.selectedBrowser;
-          const forced = this._forcedBrowsers.has(browser);
-          const excluded = this._excludedBrowsers.has(browser);
-          const currentlyShowing = (this._isDevUri(gBrowser.currentURI) && !excluded) || forced;
-          if (currentlyShowing) {
-            this._forcedBrowsers.delete(browser);
-            this._excludedBrowsers.add(browser);
-            this._showToast('Devbar off !');
-          } else {
-            this._excludedBrowsers.delete(browser);
-            this._forcedBrowsers.add(browser);
-            this._showToast('Devbar on !');
-          }
-          this._update();
-        }
+      // Site choices survive navigation, restarts, and browser windows.
+      detector._listen(window, 'keydown', (e) => {
+        if (!e.altKey || !e.shiftKey || e.ctrlKey || e.metaKey || e.repeat) return;
+        const key = e.key.toLowerCase();
+        if (key !== 'd' && key !== 'o') return;
+        e.preventDefault();
+        e.stopPropagation();
+        this._run(() => key === 'o' ? this._openSettings() : this._toggleSite());
       }, { capture: true, mozSystemGroup: true });
-
-      // Shared toggle handler for context menu items
-      const toggleDevbar = () => {
-        const browser = gBrowser.selectedBrowser;
-        const forced = this._forcedBrowsers.has(browser);
-        const excluded = this._excludedBrowsers.has(browser);
-        const currentlyShowing = (this._isDevUri(gBrowser.currentURI) && !excluded) || forced;
-        if (currentlyShowing) {
-          this._forcedBrowsers.delete(browser);
-          this._excludedBrowsers.add(browser);
-          this._showToast('Devbar off !');
-        } else {
-          this._excludedBrowsers.delete(browser);
-          this._forcedBrowsers.add(browser);
-          this._showToast('Devbar on !');
-        }
-        this._update();
-      };
+      const toggleDevbar = () => this._toggleSite();
 
       const addMenuToggle = (menuId, itemId, sepId) => {
         const menu = document.getElementById(menuId);
@@ -180,7 +252,7 @@
         const menuItem = document.createXULElement('menuitem');
         menuItem.id = itemId;
         menuItem.setAttribute('label', 'Toggle Devbar');
-        menuItem.addEventListener('command', toggleDevbar);
+        detector._listen(menuItem, 'command', toggleDevbar);
         menu.appendChild(sep);
         menu.appendChild(menuItem);
       };
@@ -206,13 +278,12 @@
     _createBanner() {
       const banner = document.createXULElement('hbox');
       banner.id = 'devbar-banner';
+      banner.setAttribute('role', 'group');
+      banner.setAttribute('aria-label', 'Developer tools for the active tab or split pane');
 
       // ── URL Bar (bridges to gURLBar) ──────────────────────────────
-      // The banner's URL field is a styled DISPLAY of the current URL. When
-      // clicked, we focus the real gURLBar — that's where typing, autocomplete,
-      // and Zen's native suggestions popup all happen. We mirror gURLBar.value
-      // back into our field via RAF so the user sees their typing in the banner
-      // too. We do NOT reposition the popup — Zen handles it in its usual spot.
+      // Typing and selection stay in this input. Values sync to gURLBar to
+      // drive Zen's native suggestions; the popup keeps its native location.
 
       const log = (...args) => {
         if (Services.prefs.getBoolPref('devbar.self-tests', false))
@@ -229,6 +300,7 @@
       field.spellcheck = false;
       field.autocomplete = 'off';
       field.placeholder = 'Search or enter URL';
+      field.setAttribute('aria-label', 'Full URL of the active tab; Enter navigates, Escape cancels');
 
       wrapper.appendChild(field);
 
@@ -239,9 +311,10 @@
       // Focus: enter edit mode. The cursor, selection, and typing all live
       // in our input. We sync our value to gURLBar to trigger its native
       // autocomplete/suggestions popup alongside.
-      field.addEventListener('focus', () => {
+      detector._listen(field, 'focus', () => {
         if (detector._isEditing) return;
         detector._isEditing = true;
+        detector._editingBrowser = gBrowser.selectedBrowser;
         field.setAttribute('data-active', '');
         const startUri = gBrowser.currentURI.spec;
         field.value = startUri;
@@ -253,17 +326,19 @@
       // After the search, check if gURLBar autofilled — if so, show the
       // autofill text in our field with the completion portion selected
       // (just like the real URL bar). ArrowRight accepts the autofill.
-      field.addEventListener('input', () => {
+      detector._listen(field, 'input', () => {
         try {
           const typed = field.value;
           const cursorPos = field.selectionStart;
+          const editBrowser = detector._editingBrowser;
           gURLBar.value = typed;
           gURLBar.setAttribute('focused', 'true');
           if (typeof gURLBar.startQuery === 'function') {
-            gURLBar.startQuery();
+            detector._run(() => gURLBar.startQuery());
           }
-          requestAnimationFrame(() => {
+          detector._requestFrame(() => {
             try {
+              if (!detector._isEditing || detector._editingBrowser !== editBrowser || field.value !== typed) return;
               const gVal = gURLBar.value;
               if (gVal.length > typed.length && gVal.toLowerCase().startsWith(typed.toLowerCase())) {
                 field.value = gVal;
@@ -279,13 +354,14 @@
       // Keydown: navigation keys are forwarded to gURLBar's suggestion list
       // so ArrowDown/ArrowUp/Tab cycle through suggestions and ArrowRight
       // accepts autofill — all using gURLBar's native logic.
-      field.addEventListener('keydown', (e) => {
+      detector._listen(field, 'keydown', (e) => {
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
           e.preventDefault();
           try {
             if (gURLBar.view?.isOpen) {
               gURLBar.view.selectBy(1, { reverse: e.key === 'ArrowUp' });
-              requestAnimationFrame(() => {
+              detector._requestFrame(() => {
+                if (!detector._isEditing || detector._editingBrowser !== gBrowser.selectedBrowser) return;
                 if (gURLBar.value) {
                   field.value = gURLBar.value;
                   field.setSelectionRange(field.value.length, field.value.length);
@@ -296,11 +372,13 @@
             log('suggestion nav error:', err);
           }
         } else if (e.key === 'Tab') {
+          if (!gURLBar.view?.isOpen) return; // Preserve keyboard access to toolbar buttons.
           e.preventDefault();
           try {
             if (gURLBar.view?.isOpen) {
               gURLBar.view.selectBy(1, { reverse: e.shiftKey });
-              requestAnimationFrame(() => {
+              detector._requestFrame(() => {
+                if (!detector._isEditing || detector._editingBrowser !== gBrowser.selectedBrowser) return;
                 if (gURLBar.value) {
                   field.value = gURLBar.value;
                   field.setSelectionRange(field.value.length, field.value.length);
@@ -354,24 +432,28 @@
         }
       });
 
-      // Blur: exit edit mode, restore display
-      field.addEventListener('blur', () => {
-        setTimeout(() => {
-          field.removeAttribute('data-active');
-          detector._isEditing = false;
-          const nowUri = gBrowser.currentURI.spec;
-          showDisplay(nowUri);
-          try {
-            if (gURLBar.view?.isOpen) gURLBar.view.close();
-            if (gURLBar.value !== nowUri) gURLBar.value = nowUri;
-          } catch {}
-          log('exited edit mode');
+      const finishEdit = () => {
+        field.removeAttribute('data-active');
+        detector._isEditing = false;
+        detector._editingBrowser = null;
+        showDisplay(gBrowser.currentURI.spec);
+        try {
+          if (gURLBar.view?.isOpen) gURLBar.view.close();
+          // Do not overwrite another control's URL edit after focus leaves us.
+          if (document.activeElement !== gURLBar.inputField) gURLBar.value = gBrowser.currentURI.spec;
+          gURLBar.removeAttribute('focused');
+        } catch {}
+      };
+      detector._listen(field, 'blur', () => {
+        const editingBrowser = detector._editingBrowser;
+        detector._setTimeout(() => {
+          if (document.activeElement === field || detector._editingBrowser !== editingBrowser) return;
+          finishEdit();
         }, 150);
       });
-
-      // Called by _update when the tab changes to a non-dev URL while editing
       detector._exitEditMode = () => {
         if (!detector._isEditing) return;
+        finishEdit();
         field.blur();
       };
 
@@ -388,11 +470,10 @@
         const toolbox = dt.getToolboxForTab(gBrowser.selectedTab);
         if (toolbox && !toolbox._destroyer) {
           if (toolbox.currentToolId === toolId) {
-            toolbox.destroy();
-            return;
+            return toolbox.destroy();
           }
         }
-        dt.showToolboxForTab(gBrowser.selectedTab, { toolId });
+        return dt.showToolboxForTab(gBrowser.selectedTab, { toolId });
       };
 
       /**
@@ -419,8 +500,10 @@
         btn.id = id;
         btn.className = 'devbar-btn';
         btn.title = title;
-        btn.addEventListener('mousedown', (e) => e.preventDefault());
-        btn.addEventListener('click', action);
+        btn.type = 'button';
+        btn.setAttribute('aria-label', title);
+        detector._listen(btn, 'mousedown', (e) => e.preventDefault());
+        detector._listen(btn, 'click', () => detector._run(action));
         return btn;
       };
 
@@ -429,7 +512,7 @@
       const copyBtn = makeBtn('devbar-copy-link', 'Copy URL', () => {
         gZenCommonActions.copyCurrentURLToClipboard();
         copyBtn.setAttribute('data-copied', '');
-        setTimeout(() => copyBtn.removeAttribute('data-copied'), 1500);
+        detector._setTimeout(() => copyBtn.removeAttribute('data-copied'), 1500);
       });
 
       // Clear site data (cookies + localStorage + cache) for the current origin.
@@ -440,9 +523,11 @@
       const clearSiteData = makeBtn('devbar-clear-data', 'Clear site data + hard reload', () => {
         try {
           const uri = gBrowser.currentURI;
+          const targetBrowser = gBrowser.selectedBrowser;
           let host;
           try { host = Services.eTLD.getBaseDomain(uri); }
           catch { host = uri.host; }
+          if (!Services.prompt.confirm(window, 'Clear site data', `Clear cookies, storage, and caches for ${host} and its subdomains? This can sign you out. The current page will reload.`)) return;
           // Use CLEAR_ALL_CACHES (network+image+JS+CSS+preflight+auth caches
           // combined) if available, otherwise fall back to individual names.
           const ciCD = Ci.nsIClearDataService;
@@ -450,11 +535,19 @@
             ?? ((ciCD.CLEAR_CACHE ?? ciCD.CLEAR_NETWORK_CACHE ?? 0) | (ciCD.CLEAR_IMAGE_CACHE ?? 0) | (ciCD.CLEAR_JS_CACHE ?? 0) | (ciCD.CLEAR_CSS_CACHE ?? 0));
           const flags = (ciCD.CLEAR_COOKIES ?? 0) | (ciCD.CLEAR_DOM_STORAGES ?? 0) | cacheFlags;
           const cb = { onDataDeleted(resultFlags) {
+            if (detector._destroyed) return;
+            if (resultFlags) {
+              detector._showToast('Some site data could not be cleared');
+              return;
+            }
             clearSiteData.setAttribute('data-done', '');
-            setTimeout(() => clearSiteData.removeAttribute('data-done'), 1500);
+            detector._setTimeout(() => clearSiteData.removeAttribute('data-done'), 1500);
             detector._showToast('Cleared site data — ' + host + ' !');
             // Hard reload AFTER confirmed deletion so we know the page fetches fresh
-            gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
+            // Do not reload a different tab if the user switched during deletion.
+            if (targetBrowser.isConnected && targetBrowser.currentURI.spec === uri.spec) {
+              targetBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
+            }
           } };
           const hasBaseDomain = typeof Services.clearData.deleteDataFromBaseDomain === 'function';
           const fn = (hasBaseDomain
@@ -468,7 +561,7 @@
       });
 
       // Reload — grouped visually with clear-data (both are page-state tools)
-      const reloadBtn = makeBtn('devbar-clear-refresh', 'Clear cache and reload', () => {
+      const reloadBtn = makeBtn('devbar-clear-refresh', 'Reload bypassing cache', () => {
         gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
         detector._showToast('Hard reloaded !');
       });
@@ -512,12 +605,12 @@
         }),
         makeBtn('devbar-console', 'Open console', () => {
           const msg = devToolsToast('Console', 'webconsole');
-          togglePanel('webconsole');
+          detector._run(() => togglePanel('webconsole'));
           if (msg) detector._showToast(msg);
         }),
         makeBtn('devbar-network', 'Open network panel', () => {
           const msg = devToolsToast('Network panel', 'netmonitor');
-          togglePanel('netmonitor');
+          detector._run(() => togglePanel('netmonitor'));
           if (msg) detector._showToast(msg);
         }),
       ];
@@ -540,15 +633,17 @@
       banner.appendChild(makeSeparator());
       banner.appendChild(viewportEl);
       banner.appendChild(makeSeparator());
-      const settingsBtn = makeBtn('devbar-settings', 'Settings', () => detector._openSettings());
+      const settingsBtn = makeBtn('devbar-settings', 'Settings (Alt+Shift+O)', () => detector._openSettings());
       banner.appendChild(settingsBtn);
 
-      // Append inside #browser, not documentElement. #browser creates a
-       // stacking context (position:relative; z-index:1) and contains
-       // #navigator-toolbox — putting the banner here lets the floating
-       // compact-mode sidebar slide OVER the banner on hover instead of
-       // being clipped underneath. Fallback to documentElement pre-layout.
-       (document.getElementById('browser') || document.documentElement).appendChild(banner);
+      const content = document.getElementById('zen-appcontent-wrapper');
+      const tabbox = document.getElementById('zen-tabbox-wrapper') || document.getElementById('tabbrowser-tabbox');
+      if (!content || tabbox?.parentNode !== content) {
+        throw new Error('Unsupported Zen content layout; Devbar was not installed.');
+      }
+      // Participate in normal layout so sidebar resizing and split view cannot
+      // leave a stale fixed overlay covering a page or its security warnings.
+      content.insertBefore(banner, tabbox);
       this._banner = banner;
       this._field = field;
       this._viewportEl = viewportEl;
@@ -563,13 +658,13 @@
       const onResize = () => {
         if (rafPending) return;
         rafPending = true;
-        requestAnimationFrame(() => {
+        detector._requestFrame(() => {
           rafPending = false;
           this._repositionBanner();
           this._updateViewport();
         });
       };
-      window.addEventListener('resize', onResize);
+      detector._listen(window, 'resize', onResize);
       // Window resize doesn't fire when only the sidebar width changes (e.g.
       // user toggles the sidebar or drags the splitter) — observe the content
       // panel directly so the banner follows its left edge and width.
@@ -578,6 +673,7 @@
         if (tabpanels && typeof ResizeObserver === 'function') {
           this._tabpanelsObserver = new ResizeObserver(onResize);
           this._tabpanelsObserver.observe(tabpanels);
+          this._viewportObserver = new ResizeObserver(() => this._updateViewport());
         }
       } catch (e) {
         console.error('[devbar] ResizeObserver setup failed:', e);
@@ -590,15 +686,9 @@
      * sidebar width.
      */
     _repositionBanner() {
-      const tabpanels = document.getElementById('tabbrowser-tabpanels');
-      if (!tabpanels || !this._banner) return;
-      const rect = tabpanels.getBoundingClientRect();
-      // Skip while layout is still initializing (common on window open) —
-      // writing left:0/width:0 would briefly cover the sidebar.
-      if (rect.width <= 0) return;
-      this._banner.style.top = rect.top + 'px';
-      this._banner.style.left = rect.left + 'px';
-      this._banner.style.width = rect.width + 'px';
+      // The banner follows its normal-flow parent. Only the floating settings
+      // panel needs coordinates when the window or sidebar is resized.
+      if (this._settingsPanel?.style.display === 'block') this._repositionPanel();
     },
 
     /**
@@ -646,11 +736,18 @@
      * @param {nsIURI} [uri] - Override URI; defaults to the current tab's URI
      */
     _update(uri) {
+      if (this._destroyed) return;
       const currentUri = uri || gBrowser.currentURI;
       const browser = gBrowser.selectedBrowser;
-      const forced = this._forcedBrowsers.has(browser);
-      const excluded = this._excludedBrowsers.has(browser);
-      const isDev = this._prefs?.enabled && ((this._isDevUri(currentUri) && !excluded) || forced);
+      if (this._viewportObserver && this._observedBrowser !== browser) {
+        this._viewportObserver.disconnect();
+        this._viewportObserver.observe(browser);
+        this._observedBrowser = browser;
+      }
+      if (this._isEditing && this._editingBrowser !== browser) this._exitEditMode();
+      const isDev = this._matchesCurrentMode(currentUri, browser);
+      if (this._banner) this._banner.hidden = !isDev;
+      document.documentElement.toggleAttribute('devbar-hide-actions', !Services.prefs.getBoolPref('devbar.show-actions', true));
       document.documentElement.toggleAttribute('devbar', isDev);
       if (!isDev && this._isEditing && this._exitEditMode) {
         this._exitEditMode();
@@ -667,7 +764,7 @@
             if (dt) {
               const toolbox = dt.getToolboxForTab(gBrowser.selectedTab);
               if (!toolbox || toolbox._destroyer) {
-                dt.showToolboxForTab(gBrowser.selectedTab, { toolId: this._prefs.autoOpenPanel });
+                this._run(() => dt.showToolboxForTab(gBrowser.selectedTab, { toolId: this._prefs.autoOpenPanel }));
               }
             }
           } catch { /* DevTools unavailable */ }
@@ -706,10 +803,10 @@
           toast.id = 'devbar-toast';
           document.documentElement.appendChild(toast);
         }
-        clearTimeout(this._toastTimer);
+        detector._clearTimeout(this._toastTimer);
         toast.textContent = msg;
         toast.setAttribute('data-visible', '');
-        this._toastTimer = setTimeout(() => toast.removeAttribute('data-visible'), 1800);
+        this._toastTimer = detector._setTimeout(() => toast.removeAttribute('data-visible'), 1800);
       }
     },
 
@@ -736,9 +833,11 @@
       input.type = 'checkbox';
       input.dataset.pref = prefKey;
       input.dataset.invert = invert ? '1' : '';
+      input.dataset.default = String(defaultVal);
+      input.setAttribute('aria-label', labelText);
       const raw = Services.prefs.getBoolPref(prefKey, defaultVal);
       input.checked = invert ? !raw : raw;
-      input.addEventListener('change', () => {
+      detector._listen(input, 'change', () => {
         Services.prefs.setBoolPref(prefKey, invert ? !input.checked : input.checked);
         detector._update();
       });
@@ -771,6 +870,8 @@
       const select = document.createElementNS('http://www.w3.org/1999/xhtml', 'select');
       select.className = 'devbar-select';
       select.dataset.pref = prefKey;
+      select.dataset.default = defaultVal;
+      select.setAttribute('aria-label', labelText);
       const current = Services.prefs.getStringPref(prefKey, defaultVal);
       for (const opt of options) {
         const el = document.createElementNS('http://www.w3.org/1999/xhtml', 'option');
@@ -779,10 +880,10 @@
         if (opt.value === current) el.selected = true;
         select.appendChild(el);
       }
-      select.addEventListener('change', () => {
+      detector._listen(select, 'change', () => {
         Services.prefs.setStringPref(prefKey, select.value);
       });
-      select.addEventListener('mousedown', e => e.stopPropagation());
+      detector._listen(select, 'mousedown', e => e.stopPropagation());
 
       row.appendChild(label);
       row.appendChild(select);
@@ -831,21 +932,30 @@
       input.className = 'devbar-text-input';
       input.dataset.pref = prefKey;
       input.placeholder = placeholder;
+      input.setAttribute('aria-label', labelText);
       input.value = Services.prefs.getStringPref(prefKey, '');
+      const validation = document.createElementNS('http://www.w3.org/1999/xhtml', 'small');
+      validation.className = 'devbar-validation';
+      validation.setAttribute('role', 'status');
 
       let debounce;
-      input.addEventListener('input', () => {
-        clearTimeout(debounce);
-        debounce = setTimeout(() => {
+      detector._listen(input, 'input', () => {
+        detector._clearTimeout(debounce);
+        debounce = detector._setTimeout(() => {
+          const error = this._validateDetectionInput(prefKey, input.value);
+          input.setAttribute('aria-invalid', String(Boolean(error)));
+          validation.textContent = error;
+          if (error) return;
           Services.prefs.setStringPref(prefKey, input.value);
           detector._update();
         }, 400);
       });
       // Prevent the field from triggering banner edit on click
-      input.addEventListener('mousedown', e => e.stopPropagation());
+      detector._listen(input, 'mousedown', e => e.stopPropagation());
 
       row.appendChild(label);
       row.appendChild(input);
+      row.appendChild(validation);
       return row;
     },
 
@@ -871,8 +981,8 @@
       labelNode.textContent = labelText;
       btn.appendChild(icon);
       btn.appendChild(labelNode);
-      btn.addEventListener('click', () => {
-        action();
+      detector._listen(btn, 'click', () => {
+        detector._run(action);
         detector._closeSettings();
       });
       row.appendChild(btn);
@@ -887,6 +997,27 @@
     _createSettingsPanel() {
       const panel = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
       panel.id = 'devbar-settings-panel';
+      panel.setAttribute('role', 'dialog');
+      panel.setAttribute('aria-label', 'Devbar settings');
+      panel.appendChild(this._makeSectionHeader('Current site'));
+      const originLabel = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+      originLabel.id = 'devbar-site-origin';
+      const siteMode = document.createElementNS('http://www.w3.org/1999/xhtml', 'select');
+      siteMode.id = 'devbar-site-mode';
+      siteMode.className = 'devbar-select';
+      siteMode.setAttribute('aria-label', 'Developer bar mode for this site');
+      for (const [value, label] of [['auto', 'Automatic'], ['on', 'Always on'], ['off', 'Always off']]) {
+        const option = document.createElementNS('http://www.w3.org/1999/xhtml', 'option');
+        option.value = value;
+        option.textContent = label;
+        siteMode.appendChild(option);
+      }
+      this._listen(siteMode, 'change', () => this._setSiteMode(siteMode.value, this._settingsOrigin));
+      panel.append(originLabel, siteMode);
+      this._siteMode = siteMode;
+      this._siteOriginLabel = originLabel;
+      panel.appendChild(this._makeToggleRow('Enable Devbar', this.PREF, true));
+      panel.appendChild(this._makeToggleRow('Show developer action buttons', 'devbar.show-actions', true));
 
       // ── Detection ─────────────────────────────────────────────
       panel.appendChild(this._makeSectionHeader('Detection'));
@@ -968,7 +1099,7 @@
         panelSelect.disabled = !on;
       };
       syncPanelRow();
-      autoOpenRow.querySelector('input').addEventListener('change', syncPanelRow);
+      this._listen(autoOpenRow.querySelector('input'), 'change', syncPanelRow);
       panel.appendChild(panelSelectRow);
 
       // ── Actions ───────────────────────────────────────────────
@@ -984,7 +1115,7 @@
         ['Open in private window', 'chrome://browser/skin/privateBrowsing.svg', () => {
           const url = gBrowser.currentURI.spec;
           const win = OpenBrowserWindow({ private: true });
-          win.addEventListener('load', () => {
+          detector._listen(win, 'load', () => {
             // Defer one tick so all chrome init finishes before we navigate.
             // fixupAndLoadURIString lives on gBrowser (the tabbrowser), NOT on
             // selectedBrowser (the <browser> element).
@@ -1032,8 +1163,11 @@
       const gear = document.getElementById('devbar-settings');
       if (!gear || !this._settingsPanel) return;
       const rect = gear.getBoundingClientRect();
-      this._settingsPanel.style.top = (rect.bottom + 4) + 'px';
-      this._settingsPanel.style.left = (rect.right - 260) + 'px';
+      const visible = document.documentElement.hasAttribute('devbar') && rect.width > 0;
+      const width = Math.min(300, window.innerWidth - 24);
+      this._settingsPanel.style.width = width + 'px';
+      this._settingsPanel.style.top = Math.max(12, Math.min(visible ? rect.bottom + 4 : 72, window.innerHeight - 160)) + 'px';
+      this._settingsPanel.style.left = Math.max(12, Math.min(visible ? rect.right - width : window.innerWidth - width - 24, window.innerWidth - width - 12)) + 'px';
     },
 
     /**
@@ -1045,13 +1179,17 @@
         this._closeSettings();
         return;
       }
+      this._settingsOrigin = this._origin();
+      this._siteMode.disabled = !this._settingsOrigin;
+      this._siteMode.value = this._siteRules[this._settingsOrigin] || 'auto';
+      this._siteOriginLabel.textContent = this._settingsOrigin || 'Remembered choices require an HTTP(S) site.';
       // Refresh all input/select states from live prefs
       this._settingsPanel.querySelectorAll('input[data-pref], select[data-pref]').forEach(el => {
         const key = el.dataset.pref;
-        if (el.tagName === 'SELECT') {
-          el.value = Services.prefs.getStringPref(key, '');
+        if (el.localName === 'select') {
+          el.value = Services.prefs.getStringPref(key, el.dataset.default || '');
         } else if (el.type === 'checkbox') {
-          const raw = Services.prefs.getBoolPref(key, true);
+          const raw = Services.prefs.getBoolPref(key, el.dataset.default === 'true');
           el.checked = el.dataset.invert ? !raw : raw;
         } else if (el.type === 'text') {
           el.value = Services.prefs.getStringPref(key, '');
@@ -1059,6 +1197,9 @@
       });
       this._repositionPanel();
       this._settingsPanel.style.display = 'block';
+      this._siteMode.disabled
+        ? this._settingsPanel.querySelector('input').focus()
+        : this._siteMode.focus();
 
       this._outsideClickHandler = (e) => {
         // Firefox renders native <select> option popups as XUL <menuitem>
@@ -1079,8 +1220,8 @@
       this._escapeHandler = (e) => {
         if (e.key === 'Escape') this._closeSettings();
       };
-      document.addEventListener('mousedown', this._outsideClickHandler, true);
-      window.addEventListener('keydown', this._escapeHandler, true);
+      detector._listen(document, 'mousedown', this._outsideClickHandler, true);
+      detector._listen(window, 'keydown', this._escapeHandler, true);
     },
 
     /**
@@ -1097,6 +1238,28 @@
         window.removeEventListener('keydown', this._escapeHandler, true);
         this._escapeHandler = null;
       }
+    },
+
+    uninit() {
+      if (this._destroyed) return;
+      this._destroyed = true;
+      this._closeSettings();
+      this._abort.abort();
+      for (const timer of this._timers) window.clearTimeout(timer);
+      for (const frame of this._frames) window.cancelAnimationFrame(frame);
+      this._timers.clear();
+      this._frames.clear();
+      this._tabpanelsObserver?.disconnect();
+      this._viewportObserver?.disconnect();
+      if (this._initialized) {
+        try { gBrowser.removeTabsProgressListener(this._progressListener); } catch {}
+      }
+      for (const pref of this._observedPrefs) Services.prefs.removeObserver(pref, this);
+      if (this._startupObserver) Services.obs.removeObserver(this._startupObserver, 'browser-delayed-startup-finished');
+      for (const id of ['devbar-banner', 'devbar-settings-panel', 'devbar-toast', 'devbar-context-toggle', 'devbar-context-sep', 'devbar-page-toggle', 'devbar-page-sep']) document.getElementById(id)?.remove();
+      document.documentElement.removeAttribute('devbar');
+      document.documentElement.removeAttribute('devbar-hide-actions');
+      if (window.__devbar === this) delete window.__devbar;
     },
 
     /**
@@ -1223,15 +1386,22 @@
   };
 
   const bootstrap = () => {
-    detector.init();
+    try { detector.init(); }
+    catch (error) { detector.uninit(); throw error; }
     // Init is synchronous (banner + field appended to DOM before return),
     // so self-tests on DOM state are reliable immediately after.
     runSelfTests();
   };
 
-  if (gBrowser) {
-    bootstrap();
-  } else {
-    window.addEventListener('DOMContentLoaded', bootstrap, { once: true });
+  detector._listen(window, 'unload', () => detector.uninit(), { once: true });
+  if (window.gBrowserInit?.delayedStartupFinished) detector._run(bootstrap);
+  else {
+    detector._startupObserver = (subject, topic) => {
+      if (subject !== window) return;
+      Services.obs.removeObserver(detector._startupObserver, topic);
+      detector._startupObserver = null;
+      detector._run(bootstrap);
+    };
+    Services.obs.addObserver(detector._startupObserver, 'browser-delayed-startup-finished');
   }
 })();
