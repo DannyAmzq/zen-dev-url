@@ -20,6 +20,12 @@ jobs:
         run: |
           ./tests/css-block.test.ps1
           ./tests/installer-cli.test.ps1
+      - name: Windows PowerShell 5.1 compatibility
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          ./tests/css-block.test.ps1
+          ./tests/installer-cli.test.ps1
       - name: Bash syntax and CSS preservation fixtures
         if: runner.os == 'Linux'
         shell: bash

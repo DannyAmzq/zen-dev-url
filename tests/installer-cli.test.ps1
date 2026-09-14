@@ -1,4 +1,4 @@
-# Run read-only installer modes against an isolated fake installation/profile.
+﻿# Run read-only installer modes against an isolated fake installation/profile.
 $ErrorActionPreference = 'Stop'
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ('devbar-cli-test-' + [Guid]::NewGuid().ToString('N'))
 $local = Join-Path $fixture 'local'
@@ -36,3 +36,6 @@ try {
   Remove-Item -LiteralPath (Join-Path $fakeZen 'zen.exe') -ErrorAction SilentlyContinue
   foreach ($dir in @($fakeZen, $local, $profile, $fixture)) { Remove-Item -LiteralPath $dir -ErrorAction SilentlyContinue }
 }
+# The negative-path child commands intentionally exit 1. Do not let that
+# expected status become this successful suite's exit code in CI wrappers.
+exit 0
