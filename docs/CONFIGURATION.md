@@ -28,6 +28,60 @@ The full toolbar retains URL editing with native Zen suggestions, the viewport r
 
 Reload bypassing cache preserves cookies and authentication; the separate site-data clearing action removes site data and can sign you out. Do not confuse them.
 
-Cache, mixed-content, and JavaScript options change browser preferences and can outlive the mod. In particular, `javascript.enabled` is global, not a per-tab control. See the README preference table. Disabling the mod does not undo those independent browser preferences.
+Cache, mixed-content, and JavaScript options change browser preferences and can outlive the mod. In particular, `javascript.enabled` is global, not a per-tab control. See the preference reference below. Disabling the mod does not undo those independent browser preferences.
 
 Use the developer-action visibility setting if you only need the URL. Keyboard shortcuts may conflict with OS bindings or other mods; on macOS Alt corresponds to Option.
+
+## Toolbar controls
+
+![Current devbar URL field and developer action buttons](media/beta-controls.png)
+
+| Control | What it does |
+|---|---|
+| **URL display** | Shows the current URL; click to edit, `Enter` to navigate, `Escape` to cancel |
+| **Copy** | Copies the URL — shows Zen's native toast |
+| **Trash** | Confirms the registered-domain and subdomain scope, clears site data, then reloads the original tab after success; can sign you out |
+| **Reload** | Hard reload (bypass cache only — preserves auth/cookies) |
+| **Screenshot** | Toggles the Firefox Screenshots panel |
+| **Inspector** | Opens DevTools element picker |
+| **Console** | Toggles DevTools console |
+| **Network** | Toggles DevTools network panel |
+| **Viewport** | Live `W × H` readout, updates on resize |
+| **⚙ Gear** | Opens the settings panel |
+
+<details>
+<summary>Current site and detection settings</summary>
+
+<img src="media/beta-settings.png" width="300" alt="Current devbar site mode selector and detection settings" />
+
+The panel scrolls to show additional controls.
+
+</details>
+
+## about:config prefs
+
+All preferences are under `devbar.*`. You can tweak them directly in `about:config` or through the gear panel.
+
+**devbar prefs** (created by this mod):
+
+| Preference | Default | Description |
+|---|---|---|
+| `devbar.enabled` | `true` | Master on/off switch |
+| `devbar.include-zero-host` | `true` | Match `0.0.0.0` |
+| `devbar.include-local-tlds` | `true` | Match `.local` / `.test` / `.localhost` / `.internal` |
+| `devbar.include-file-urls` | `false` | Match `file://` URLs |
+| `devbar.custom-ports` | `""` | Comma-separated port list |
+| `devbar.custom-patterns` | `""` | Comma-separated glob host patterns |
+| `devbar.auto-open-devtools` | `false` | Auto-open DevTools on every dev URL navigation |
+| `devbar.auto-open-panel` | `"webconsole"` | Which panel auto-open uses (`webconsole` / `netmonitor` / `inspector`) |
+| `devbar.self-tests` | `false` | Run logic self-tests on window open and print results to the console (for contributors) |
+| `devbar.site-rules` | `"{}"` | Remembered HTTP(S) origins mapped to `"on"` or `"off"`; Automatic removes the entry |
+| `devbar.show-actions` | `true` | Show developer action buttons in the banner |
+
+**Firefox prefs** (not owned by this mod — the settings panel just toggles them so your changes survive restart):
+
+| Preference | Default | Description |
+|---|---|---|
+| `devtools.cache.disabled` | `false` | Disable HTTP cache |
+| `security.mixed_content.block_active_content` | `true` | Block mixed content (panel toggle is inverted: unchecked = block) |
+| `javascript.enabled` | `true` | JavaScript enabled globally |
